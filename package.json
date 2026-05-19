@@ -4,15 +4,24 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web"
   },
   "dependencies": {
+    "@react-navigation/native": "^7.2.4",
+    "@react-navigation/native-stack": "^7.15.1",
+    "axios": "^1.16.1",
     "expo": "~55.0.24",
+    "expo-av": "^16.0.8",
+    "expo-dev-client": "~55.0.34",
+    "expo-document-picker": "~55.0.13",
+    "expo-secure-store": "~55.0.14",
     "expo-status-bar": "~55.0.6",
     "react": "19.2.0",
-    "react-native": "0.83.6"
+    "react-native": "0.83.6",
+    "react-native-safe-area-context": "~5.6.2",
+    "react-native-screens": "~4.23.0"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
