@@ -4,42 +4,99 @@ namespace App\Http\Controllers;
 
 use App\Models\ReadingRequest;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Smalot\PdfParser\Parser as PdfParser;
 
 class ReadingRequestController extends Controller
 {
     public function store(Request $request)
     {
-        $validated = $request->validate([
+        $request->validate([
             'title' => 'required|string|max:255',
-            'description_or_text' => 'required|string',
-            'file' => 'nullable|file|mimes:pdf,doc,docx,txt|max:15360', // Máximo 15MB por documento
+            'description_or_text' => 'nullable|string',
+            'file' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240', // Aceptamos PDF e Imágenes
         ]);
 
-        $filePath = null;
+        $textoFinal = $request->description_or_text ?? '';
 
-        // Si la app móvil envió un archivo físico, lo guardamos en storage/app/public/requests
+        // Si el usuario subió un archivo, vamos a intentar escanearlo
         if ($request->hasFile('file')) {
-            $filePath = $request->file('file')->store('requests', 'public');
+            $file = $request->file('file');
+            $extension = strtolower($file->getClientOriginalExtension());
+
+            // CASO A: Es un archivo PDF
+            if ($extension === 'pdf') {
+                try {
+                    $parser = new PdfParser();
+                    $pdf = $parser->parseFile($file->getRealPath());
+
+                    // Extraemos todo el texto legible del PDF
+                    $textoExtraido = $pdf->getText();
+
+                    if (!empty(trim($textoExtraido))) {
+                        // Si el usuario también escribió algo en la caja de texto, lo sumamos
+                        $textoFinal = !empty($textoFinal)
+                            ? $textoFinal . "\n\n--- Texto escaneado del PDF ---\n" . $textoExtraido
+                            : $textoExtraido;
+                    }
+                } catch (\Exception $e) {
+                    Log::error("Error extrayendo texto de PDF: " . $e->getMessage());
+                    // Si falla el parseo, no trabamos la app, se guarda el archivo igual
+                }
+            }
+
+            // CASO B: Es una Foto / Imagen (JPG, JPEG, PNG)
+            elseif (in_array($extension, ['jpg', 'jpeg', 'png'])) {
+                try {
+                    // Usamos el modelo 'trocr' de Microsoft en Hugging Face (Es gratis y excelente para OCR)
+                    $response = Http::withHeaders([
+                        'Authorization' => 'Bearer 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',
+                        'Content-Type' => $file->getMimeType(),
+                    ])->withBody(
+                        file_get_contents($file->getRealPath()),
+                        $file->getMimeType()
+                    )->post('https://api-inference.huggingface.co/models/microsoft/trocr-large-printed');
+
+                    if ($response->successful()) {
+                        $resultado = $response->json();
+                        // Este modelo devuelve un array con la propiedad 'generated_text'
+                        $textoEscaneado = $resultado[0]['generated_text'] ?? '';
+
+                        if (!empty(trim($textoEscaneado))) {
+                            $textoFinal = !empty($textoFinal)
+                                ? $textoFinal . "\n\n--- Texto escaneado de la foto ---\n" . $textoEscaneado
+                                : $textoEscaneado;
+                        }
+                    }
+                } catch (\Exception $e) {
+                    Log::error("Error en OCR de imagen con HuggingFace: " . $e->getMessage());
+                }
+            }
+
+            $path = $file->store('attachments', 'public');
+        } else {
+            $path = null;
         }
 
-        $readingRequest = ReadingRequest::create([
-            'oyente_id' => $request->user()->id,
-            'title' => $validated['title'],
-            'description_or_text' => $validated['description_or_text'],
-            'file_path' => $filePath,
-            'status' => 'pending',
-        ]);
+        // Guardamos en la base de datos
+        $readingRequest = new ReadingRequest();
+        $readingRequest->title = $request->title;
+        $readingRequest->description_or_text = $textoFinal;
+        $readingRequest->file_path = $path;
+        $readingRequest->status = 'pending';
+        $readingRequest->oyente_id = $request->user()->id;
+        $readingRequest->save();
 
         return response()->json([
-            'message' => 'Pedido creado exitosamente con adjunto',
+            'message' => 'Pedido creado exitosamente.',
             'data' => $readingRequest
         ], 201);
     }
 
     public function index()
     {
-        // Traemos los pedidos pendientes, del más nuevo al más viejo
-        $requests = \App\Models\ReadingRequest::where('status', 'pending')
+        $requests = ReadingRequest::where('status', 'pending')
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -56,25 +113,40 @@ class ReadingRequestController extends Controller
 
         $readingRequest = \App\Models\ReadingRequest::findOrFail($id);
 
-        // Guardamos el audio en la carpeta public/audios
-        $audioPath = $request->file('audio')->store('audios', 'public');
+        // El pedido pasa a estar en cuarentena (evaluando)
+        $readingRequest->status = 'validating';
+        $readingRequest->save();
 
-        // Actualizamos el pedido
-        $readingRequest->update([
-            'audio_path' => $audioPath,
-            'status' => 'completed',
-            'voluntario_id' => $request->user()->id, // Guardamos quién lo grabó
+        $path = $request->file('audio')->store('audios', 'public');
+
+        // 🆕 CREAMOS EL REGISTRO DE LA GRABACIÓN ESPECÍFICA
+        $recording = \App\Models\VolunteerRecording::create([
+            'reading_request_id' => $readingRequest->id,
+            'volunteer_id' => $request->user()->id,
+            'audio_path' => $path,
+            'status' => 'validating'
         ]);
 
-        return response()->json([
-            'message' => '¡Audio subido con éxito!',
-            'data' => $readingRequest
-        ]);
+        // 🔔 Notificación push inmediata al voluntario
+        $voluntario = $request->user();
+        if ($voluntario->expo_push_token) {
+            \Illuminate\Support\Facades\Http::withoutVerifying()->post('https://exp.host/--/api/v2/push/send', [
+                'to' => $voluntario->expo_push_token,
+                'title' => 'Audio en evaluación ⏳',
+                'body' => 'Recibimos tu grabación. La IA la está procesando.',
+                'sound' => 'default',
+            ]);
+        }
+
+        // Despachamos el Job pasándole el ID de la GRABACIÓN, no del pedido
+        \App\Jobs\ValidateAudioJob::dispatch($recording->id);
+
+        return response()->json(['message' => '¡Audio recibido! Procesando calidad.']);
     }
 
     public function myRequests(Request $request)
     {
-        // Traemos solo los pedidos del oyente que está logueado
+        // Traemos solo los pedidos del oyente que está logueado 
         $requests = ReadingRequest::where('oyente_id', $request->user()->id)
             ->orderBy('created_at', 'desc')
             ->get();
@@ -82,5 +154,47 @@ class ReadingRequestController extends Controller
         return response()->json([
             'data' => $requests
         ]);
+    }
+
+    // Actualizar un pedido
+    public function update(Request $request, $id)
+    {
+        $readingRequest = ReadingRequest::where('id', $id)
+            ->where('oyente_id', $request->user()->id)
+            ->firstOrFail();
+
+        if ($readingRequest->status !== 'pending') {
+            return response()->json(['message' => 'No podés editar un pedido que ya fue grabado o está en evaluación.'], 403);
+        }
+
+        $request->validate([
+            'title' => 'sometimes|string|max:255',
+            'description_or_text' => 'sometimes|string',
+        ]);
+
+        $readingRequest->update($request->only(['title', 'description_or_text']));
+
+        return response()->json(['message' => 'Pedido actualizado con éxito.', 'data' => $readingRequest]);
+    }
+
+    // Eliminar un pedido
+    public function destroy(Request $request, $id)
+    {
+        $readingRequest = ReadingRequest::where('id', $id)
+            ->where('oyente_id', $request->user()->id)
+            ->firstOrFail();
+
+        if ($readingRequest->status !== 'pending') {
+            return response()->json(['message' => 'No podés eliminar un pedido en proceso. Contactá a soporte si necesitás bajarlo.'], 403);
+        }
+
+        // Si tiene una imagen asociada, la borramos del storage
+        if ($readingRequest->image_path) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($readingRequest->image_path);
+        }
+
+        $readingRequest->delete();
+
+        return response()->json(['message' => 'Pedido eliminado correctamente.']);
     }
 }

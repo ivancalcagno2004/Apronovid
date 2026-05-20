@@ -1,14 +1,14 @@
 {
   "expo": {
-    "name": "appronovid-mobile",
-    "slug": "appronovid-mobile",
-    "scheme": "appronovid",
+    "name": "apronovid",
+    "slug": "apronovid",
+    "scheme": "apronovid",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash_icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -16,25 +16,31 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.apronovid.app",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
-      },
-      "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.appronovidmobile"
+      "foregroundImage": "./assets/splash_icon.png",
+      "backgroundColor": "#ffffff"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-notifications",
+          {
+            "icon": "./assets/splash_icon.png",
+            "color": "#ffffff"
+          }
+      ]
     ],
     "extra": {
       "eas": {
-        "projectId": "a593a022-b873-4ec0-8b4a-999436894cc8"
+        "projectId": "a96ae1b8-859f-4e54-b5dd-bc5b43f487cf"
       }
-    }
+    },
+    "owner": "ivan318"
   }
 }

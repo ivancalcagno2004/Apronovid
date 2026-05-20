@@ -1,177 +1,180 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
+import * as Device from 'expo-device';
+import * as Notifications from 'expo-notifications';
 import api from '../../services/api';
-import { useAuth } from '../../context/AuthContext';
+import { Theme } from '../../styles/theme';
+
+// Importamos el logo oficial
+const logoMedalla = require('../../../assets/favicon.png');
 
 export default function ReaderDashboard({ navigation }: any) {
   const [title, setTitle] = useState('');
-  const [descriptionOrLink, setDescriptionOrLink] = useState('');
-  const [pickedFile, setPickedFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
+  const [text, setText] = useState('');
+  const [file, setFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { logout } = useAuth();
 
-  const handlePickDocument = async () => {
+  // 1️⃣ AL ENTRAR: Registramos el celular para recibir notificaciones
+  useEffect(() => {
+    registerForPushNotificationsAsync();
+  }, []);
+
+  // 2️⃣ FUNCIÓN: Obtiene el token de Expo y lo manda a Laravel
+  async function registerForPushNotificationsAsync() {
+    let token;
+
+    if (Device.isDevice) {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      
+      if (finalStatus !== 'granted') {
+        console.log('Fallo al obtener los permisos para notificaciones push en el Oyente');
+        return;
+      }
+      
+      // Pedimos el token mágico de Expo usando tu Project ID
+      token = (await Notifications.getExpoPushTokenAsync({
+        projectId: 'a96ae1b8-859f-4e54-b5dd-bc5b43f487cf'
+      })).data;
+      
+      // Se lo mandamos a Laravel para que lo guarde en la tabla users
+      try {
+        // 🛠️ CORREGIDO: Ahora usa POST, la ruta oficial y la variable "token"
+        await api.post('/user/push-token', { token: token }); 
+        console.log('Token del Oyente guardado en Laravel:', token);
+      } catch (error) {
+        console.error('Error enviando el token del Oyente:', error);
+      }
+    } else {
+      console.log('Las Push Notifications necesitan un dispositivo físico para funcionar.');
+    }
+  }
+
+  const pickDocument = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'],
+        type: ['application/pdf', 'image/*'],
         copyToCacheDirectory: true,
       });
 
-      if (!result.canceled) {
-        setPickedFile(result.assets[0]);
-        // Si no había título, le sugerimos el nombre del archivo automáticamente
-        if (!title) {
-          setTitle(result.assets[0].name.split('.').slice(0, -1).join('.'));
-        }
+      if (!result.canceled && result.assets.length > 0) {
+        setFile(result.assets[0]);
+        Alert.alert('Archivo adjuntado', `Se seleccionó: ${result.assets[0].name}`);
       }
-    } catch (error) {
-      console.error('Error al seleccionar documento:', error);
-      Alert.alert('Error', 'No se pudo abrir el selector de archivos.');
+    } catch (err) {
+      console.error('Error al seleccionar documento:', err);
     }
   };
 
-  const handleSubmit = async () => {
-    // Es obligatorio tener un título y, o bien un texto/link, o bien un archivo físico
-    if (!title || (!descriptionOrLink && !pickedFile)) {
-      Alert.alert('Campos incompletos', 'Por favor, ingresá el título y proporciona un texto, enlace o archivo.');
+  const submitRequest = async () => {
+    if (!title || (!text && !file)) {
+      Alert.alert('Faltan datos', 'Ingresá un título y el texto que querés que te lean, o adjuntá un archivo.');
       return;
     }
 
     try {
       setIsSubmitting(true);
-
-      // Creamos el FormData para soportar el envío del archivo binario
       const formData = new FormData();
       formData.append('title', title);
-      formData.append('description_or_text', descriptionOrLink || 'Documento adjunto');
-
-      if (pickedFile) {
-        // Estructura nativa requerida para adjuntar archivos en React Native FormData
+      if (text) formData.append('description_or_text', text);
+      
+      if (file) {
         formData.append('file', {
-          uri: pickedFile.uri,
-          name: pickedFile.name,
-          type: pickedFile.mimeType || 'application/octet-stream',
+          uri: file.uri,
+          name: file.name,
+          type: file.mimeType || 'application/octet-stream',
         } as any);
       }
 
-      // Enviamos el POST especificando el header multipart/form-data
       await api.post('/reading-requests', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      Alert.alert('¡Pedido enviado!', 'Tu solicitud ya está en el muro de los voluntarios.');
+      Alert.alert('¡Pedido enviado!', 'Los voluntarios ya pueden ver tu solicitud.');
       setTitle('');
-      setDescriptionOrLink('');
-      setPickedFile(null);
+      setText('');
+      setFile(null);
+      
+      navigation.navigate('Audios');
 
-    } catch (error: any) {
-      console.error('Error al enviar pedido:', error?.response?.data || error);
-      Alert.alert('Error', 'No se pudo subir la solicitud al servidor.');
+    } catch (error) {
+      console.error('Error al enviar:', error);
+      Alert.alert('Error', 'No se pudo enviar el pedido.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await api.post('/logout'); 
-    } catch (error) {
-      console.error('Error avisando al backend del logout', error);
-    } finally {
-      await logout(); 
-    }
-  };
-
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <TouchableOpacity 
-              style={{ padding: 8, display: 'flex', backgroundColor: '#F8D7DA', borderRadius: 8, alignItems: 'center' }}
-              onPress={handleLogout}
-            >
-              <Text style={{ color: '#DC3545', fontWeight: 'bold', fontSize: 14 }}>
-                🚪 Cerrar Sesión
-              </Text>
-      </TouchableOpacity>
-      <TouchableOpacity 
-        style={{ backgroundColor: '#212529', padding: 18, borderRadius: 16, alignItems: 'center', marginTop: 20 }}
-        onPress={() => navigation.navigate('ReaderHistory')}
-        accessible={true}
-        accessibilityRole="button"
-        accessibilityLabel="Ir a Mis Pedidos para escuchar los audios terminados"
-      >
-        <Text style={{ color: 'white', fontSize: 18, fontWeight: 'bold' }}>🎧 Ver Mis Audios</Text>
-      </TouchableOpacity>
-      <Text style={styles.title} accessibilityRole="header">Pedir un nuevo audio</Text>
-      <Text style={styles.subtitle}>Cargá el material para que un voluntario lo grabe.</Text>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        
+        {/* Cabecera corporativa unificada */}
+        <View style={styles.header}>
+          <View style={styles.headerBrand}>
+            <Image source={logoMedalla} style={styles.headerLogo} />
+            <Text style={styles.title} accessibilityRole="header">Nuevo Pedido</Text>
+          </View>
+        </View>
 
-      <Text style={styles.label} importantForAccessibility="no">Título del material</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Ej: Capítulo 3 de Biología"
-        value={title}
-        onChangeText={setTitle}
-        editable={!isSubmitting}
-        accessible={true}
-        accessibilityLabel="Título del material"
-      />
+        <Text style={styles.subtitle}>¿Qué te gustaría escuchar hoy?</Text>
 
-      <Text style={styles.label} importantForAccessibility="no">Adjuntar Archivo (Opcional)</Text>
-      <TouchableOpacity 
-        style={[styles.pickerButton, pickedFile && styles.pickerButtonActive]}
-        onPress={handlePickDocument}
-        disabled={isSubmitting}
-        accessible={true}
-        accessibilityRole="button"
-        accessibilityLabel={pickedFile ? `Archivo seleccionado: ${pickedFile.name}` : "Seleccionar documento de la memoria"}
-        accessibilityHint="Toca dos veces para buscar un PDF, Word o archivo de texto en tu celular."
-      >
-        <Text style={styles.pickerButtonText}>
-          {pickedFile ? `📄 ${pickedFile.name}` : '📁 Buscar PDF, Word o Texto...'}
-        </Text>
-      </TouchableOpacity>
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Título del pedido</Text>
+          <TextInput style={styles.input} placeholder="Ej: Resumen de historia..." placeholderTextColor={Theme.colors.textMuted} value={title} onChangeText={setTitle} />
+        </View>
 
-      <Text style={styles.label} importantForAccessibility="no">Notas, Enlace o Texto alternativo</Text>
-      <TextInput
-        style={[styles.input, styles.textArea]}
-        placeholder="Podés pegar un link de Drive, escribir aclaraciones para el lector, o dejar el texto directamente acá si no subiste un archivo."
-        value={descriptionOrLink}
-        onChangeText={setDescriptionOrLink}
-        editable={!isSubmitting}
-        multiline={true}
-        numberOfLines={4}
-        textAlignVertical="top"
-        accessible={true}
-        accessibilityLabel="Notas o texto descriptivo adicional"
-      />
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Texto a leer (Opcional si adjuntás archivo)</Text>
+          <TextInput style={[styles.input, styles.textArea]} placeholder="Escribí o pegá acá el texto completo..." placeholderTextColor={Theme.colors.textMuted} value={text} onChangeText={setText} multiline numberOfLines={6} textAlignVertical="top" />
+        </View>
 
-      <TouchableOpacity 
-        style={[styles.button, isSubmitting && styles.buttonDisabled]} 
-        onPress={handleSubmit}
-        disabled={isSubmitting}
-        accessible={true}
-        accessibilityRole="button"
-        accessibilityLabel="Publicar pedido de lectura"
-      >
-        {isSubmitting ? <ActivityIndicator color="#FFF" /> : <Text style={styles.buttonText}>Publicar Pedido</Text>}
-      </TouchableOpacity>
-    </ScrollView>
+        <TouchableOpacity style={styles.fileButton} onPress={pickDocument}>
+          <Text style={styles.fileButtonText}>{file ? `📎 Archivo: ${file.name}` : '📄 Adjuntar PDF o Imagen (Opcional)'}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[styles.submitButton, isSubmitting && styles.buttonDisabled]} onPress={submitRequest} disabled={isSubmitting}>
+          {isSubmitting ? <ActivityIndicator color="#FFF" size="large" /> : <Text style={styles.submitButtonText}>Enviar Pedido</Text>}
+        </TouchableOpacity>
+
+        <View style={styles.divider} />
+
+        <TouchableOpacity style={styles.historyButton} onPress={() => navigation.navigate('Audios')}>
+          <Text style={styles.historyButtonText}>🎧 Escuchar Mis Audios</Text>
+        </TouchableOpacity>
+
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 24, backgroundColor: '#F8F9FA' },
-  title: { fontSize: 26, fontWeight: 'bold', color: '#212529', marginBottom: 8 },
-  subtitle: { fontSize: 15, color: '#6C757D', marginBottom: 32 },
-  label: { fontSize: 15, fontWeight: '600', color: '#495057', marginBottom: 8 },
-  input: { backgroundColor: '#FFF', padding: 16, borderRadius: 12, marginBottom: 20, fontSize: 16, borderWidth: 1, borderColor: '#DEE2E6' },
-  pickerButton: { backgroundColor: '#FFF', padding: 18, borderRadius: 12, marginBottom: 24, borderWidth: 2, borderColor: '#0D6EFD', borderStyle: 'dashed', alignItems: 'center' },
-  pickerButtonActive: { borderColor: '#198754', backgroundColor: '#E8F5E9' },
-  pickerButtonText: { color: '#0D6EFD', fontSize: 16, fontWeight: '600' },
-  textArea: { minHeight: 100 },
-  button: { backgroundColor: '#0D6EFD', paddingVertical: 18, borderRadius: 16, alignItems: 'center', marginTop: 10, elevation: 2 },
-  buttonDisabled: { backgroundColor: '#6C757D' },
-  buttonText: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' }
+  container: { flex: 1, backgroundColor: Theme.colors.background },
+  scrollContent: { padding: Theme.spacing.padding, paddingBottom: 40 },
+  
+  // Estilos de cabecera alineados al muro de voluntario
+  header: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 12, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: Theme.colors.border },
+  headerBrand: { flexDirection: 'row', alignItems: 'center' },
+  headerLogo: { width: 36, height: 36, marginRight: 12 },
+  title: { fontSize: Theme.text.fontSizeHeader, fontWeight: 'bold', color: Theme.colors.primary },
+  
+  subtitle: { fontSize: Theme.text.fontSizeBody, color: Theme.colors.textMuted, marginBottom: 24, marginTop: 8 },
+  inputGroup: { marginBottom: 20 },
+  inputLabel: { fontSize: Theme.text.fontSizeBody, fontWeight: 'bold', color: Theme.colors.text, marginBottom: 8, marginLeft: 4 },
+  input: { backgroundColor: Theme.colors.backgroundCard, padding: 18, borderRadius: Theme.spacing.borderRadiusCard, fontSize: Theme.text.fontSizeTitle, color: Theme.colors.text, borderWidth: 1, borderColor: Theme.colors.border },
+  textArea: { minHeight: 150 },
+  fileButton: { backgroundColor: Theme.colors.backgroundCard, padding: 18, borderRadius: Theme.spacing.borderRadiusCard, marginBottom: 24, borderWidth: 2, borderColor: Theme.colors.accent, borderStyle: 'dashed', alignItems: 'center' },
+  fileButtonText: { color: Theme.colors.accent, fontSize: Theme.text.fontSizeBody, fontWeight: 'bold', textAlign: 'center' },
+  submitButton: { backgroundColor: Theme.colors.buttonPrimary, paddingVertical: 20, borderRadius: Theme.spacing.borderRadius, alignItems: 'center', elevation: 2 },
+  buttonDisabled: { backgroundColor: Theme.colors.textMuted, elevation: 0 },
+  submitButtonText: { color: Theme.colors.buttonPrimaryText, fontSize: 20, fontWeight: 'bold' },
+  divider: { height: 1, backgroundColor: Theme.colors.border, marginVertical: 30 },
+  historyButton: { backgroundColor: Theme.colors.backgroundCard, paddingVertical: 20, borderRadius: Theme.spacing.borderRadius, alignItems: 'center', borderWidth: 1, borderColor: Theme.colors.border, elevation: 1 },
+  historyButtonText: { color: Theme.colors.text, fontSize: 18, fontWeight: 'bold' }
 });

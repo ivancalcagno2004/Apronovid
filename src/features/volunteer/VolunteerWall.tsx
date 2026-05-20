@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Image } from 'react-native';
 import api from '../../services/api';
-import { useAuth } from '../../context/AuthContext'; // Ajustá la ruta según tu proyecto
-// Definimos cómo luce un pedido
+import { Theme } from '../../styles/theme'; 
+
+// Importamos el logo oficial 
+const logoMedalla = require('../../../assets/favicon.png');
+
 interface ReadingRequest {
   id: number;
   title: string;
@@ -14,7 +17,6 @@ interface ReadingRequest {
 export default function VolunteerWall({ navigation }: any) {
   const [requests, setRequests] = useState<ReadingRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { logout } = useAuth();
 
   const fetchRequests = async () => {
     try {
@@ -29,23 +31,12 @@ export default function VolunteerWall({ navigation }: any) {
     }
   };
 
-  // Cargamos los pedidos apenas entra a la pantalla
   useEffect(() => {
     fetchRequests();
   }, []);
 
-  const handleLogout = async () => {
-    try {
-      await api.post('/logout'); 
-    } catch (error) {
-      console.error('Error avisando al backend del logout', error);
-    } finally {
-      await logout(); 
-    }
-  };
-
   const renderItem = ({ item }: { item: ReadingRequest }) => (
-    <View style={styles.card}>
+    <View style={styles.card} accessible={true}>
       <Text style={styles.cardTitle}>{item.title}</Text>
       <Text style={styles.cardDescription} numberOfLines={3}>
         {item.description_or_text}
@@ -58,9 +49,11 @@ export default function VolunteerWall({ navigation }: any) {
       <TouchableOpacity 
         style={styles.actionButton}
         onPress={() => {
-          // Acá navegamos a la grabadora pasándole el ID del pedido
           navigation.navigate('VolunteerDashboard', { request: item });
         }}
+        accessible={true}
+        accessibilityRole="button"
+        accessibilityLabel={`Seleccionar para grabar: ${item.title}`}
       >
         <Text style={styles.actionButtonText}>🎙️ Seleccionar para Grabar</Text>
       </TouchableOpacity>
@@ -69,23 +62,19 @@ export default function VolunteerWall({ navigation }: any) {
 
   return (
     <View style={styles.container}>
+      {/* Cabecera corporativa clara */}
       <View style={styles.header}>
-        <Text style={styles.title}>Muro de Pedidos</Text>
+        <View style={styles.headerBrand}>
+          <Image source={logoMedalla} style={styles.headerLogo} />
+          <Text style={styles.title} accessibilityRole="header">Muro de Pedidos</Text>
+        </View>
         <TouchableOpacity onPress={fetchRequests} style={styles.refreshButton}>
-          <Text style={styles.refreshText}>🔄 Actualizar</Text>
+          <Text style={styles.refreshText}>🔄</Text>
         </TouchableOpacity>
-        <TouchableOpacity 
-        style={{ alignSelf: 'flex-end', padding: 8, display: 'flex', backgroundColor: '#F8D7DA', borderRadius: 8 }}
-        onPress={handleLogout}
-      >
-        <Text style={{ color: '#DC3545', fontWeight: 'bold', fontSize: 14 }}>
-          🚪 Cerrar Sesión
-        </Text>
-      </TouchableOpacity>
       </View>
 
       {isLoading ? (
-        <ActivityIndicator size="large" color="#0D6EFD" style={{ marginTop: 50 }} />
+        <ActivityIndicator size="large" color={Theme.colors.primary} style={{ marginTop: 50 }} />
       ) : requests.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyText}>No hay pedidos pendientes. ¡Todo está leído!</Text>
@@ -104,17 +93,19 @@ export default function VolunteerWall({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA', paddingHorizontal: 20, paddingTop: 20 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  title: { fontSize: 26, fontWeight: 'bold', color: '#212529' },
-  refreshButton: { padding: 8, backgroundColor: '#E9ECEF', borderRadius: 8 },
-  refreshText: { color: '#495057', fontWeight: 'bold' },
-  card: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, marginBottom: 16, elevation: 2 },
-  cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#212529', marginBottom: 8 },
-  cardDescription: { fontSize: 14, color: '#6C757D', marginBottom: 12, lineHeight: 20 },
-  fileBadge: { color: '#0D6EFD', fontSize: 13, fontWeight: 'bold', marginBottom: 12 },
-  actionButton: { backgroundColor: '#198754', paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
-  actionButtonText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 16 },
+  container: { flex: 1, backgroundColor: Theme.colors.background, paddingHorizontal: Theme.spacing.padding, paddingTop: Theme.spacing.padding },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: Theme.colors.border },
+  headerBrand: { flexDirection: 'row', alignItems: 'center' },
+  headerLogo: { width: 36, height: 36, marginRight: 12 }, 
+  title: { fontSize: Theme.text.fontSizeHeader, fontWeight: 'bold', color: Theme.colors.primary },
+  refreshButton: { padding: 10, backgroundColor: Theme.colors.backgroundCard, borderRadius: 8, borderWidth: 1, borderColor: Theme.colors.border },
+  refreshText: { fontSize: Theme.text.fontSizeTitle },
+  card: { backgroundColor: Theme.colors.backgroundCard, padding: 20, borderRadius: Theme.spacing.borderRadiusCard, marginBottom: 16, borderWidth: 1, borderColor: Theme.colors.border, elevation: 1 },
+  cardTitle: { fontSize: Theme.text.fontSizeTitle, fontWeight: 'bold', color: Theme.colors.text, marginBottom: 8 },
+  cardDescription: { fontSize: Theme.text.fontSizeBody, color: Theme.colors.textMuted, marginBottom: 12, lineHeight: 22 },
+  fileBadge: { color: Theme.colors.accent, fontSize: Theme.text.fontSizeMuted, fontWeight: 'bold', marginBottom: 16 },
+  actionButton: { backgroundColor: Theme.colors.buttonPrimary, paddingVertical: 14, borderRadius: Theme.spacing.borderRadius, alignItems: 'center' },
+  actionButtonText: { color: Theme.colors.buttonPrimaryText, fontWeight: 'bold', fontSize: Theme.text.fontSizeBody },
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyText: { fontSize: 16, color: '#6C757D', textAlign: 'center' }
+  emptyText: { fontSize: Theme.text.fontSizeBody, color: Theme.colors.textMuted, textAlign: 'center' }
 });

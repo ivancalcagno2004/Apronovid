@@ -4,20 +4,19 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 
 import RoleSelectionScreen from '../features/auth/RoleSelectionScreen';
-import RegisterScreen from '../features/auth/RegisterScreen';
-import ReaderDashboard from '../features/reader/ReaderDashboard';
-import ReaderHistory from '../features/reader/ReaderHistory';
-import VolunteerDashboard from '../features/volunteer/VolunteerDashboard';
-import VolunteerWall from '../features/volunteer/VolunteerWall';
 import LoginScreen from '../features/auth/LoginScreen';
+import RegisterScreen from '../features/auth/RegisterScreen';
 
+// Pestañas y Pantallas Sueltas
+import VolunteerTabs from './VolunteerTabs';
+import VolunteerDashboard from '../features/volunteer/VolunteerDashboard';
+import ReaderTabs from './ReaderTabs'; 
 
 const Stack = createNativeStackNavigator();
 
 export default function AppNavigator() {
   const { user, isLoading } = useAuth();
 
-  // Si está comprobando el token en el SecureStore, mostramos una pantalla de carga nativa
   if (isLoading) {
     return (
       <View style={styles.center}>
@@ -31,19 +30,21 @@ export default function AppNavigator() {
       {!user ? (
         <>
           <Stack.Screen name="RoleSelection" component={RoleSelectionScreen} options={{ headerShown: false }} />
-          <Stack.Screen name="Register" component={RegisterScreen} options={{ title: 'Registro' }} />
-          <Stack.Screen name="Login" component={LoginScreen} options={{ title: 'Iniciar Sesión' }} />
+          <Stack.Screen name="Register" component={RegisterScreen} options={{ title: 'Registro', headerShown: false }} />
+          <Stack.Screen name="Login" component={LoginScreen} options={{ title: 'Iniciar Sesión', headerShown: false }} />
         </>
       ) : (
         user.role === 'oyente' ? (
           <>
-            <Stack.Screen name="ReaderDashboard" component={ReaderDashboard} options={{ title: 'Mi Biblioteca' }} />
-            <Stack.Screen name="ReaderHistory" component={ReaderHistory} options={{ title: 'Mi Historial' }} />
+            {/* El Oyente ahora entra directo a sus pestañas */}
+            <Stack.Screen name="ReaderHome" component={ReaderTabs} options={{ headerShown: false }} />
           </>
         ) : (
           <>
-            <Stack.Screen name="VolunteerDashboard" component={VolunteerDashboard} options={{ title: 'Muro de Voluntariado' }} />
-            <Stack.Screen name="VolunteerWall" component={VolunteerWall} options={{ title: 'Muro de Voluntariado' }} />
+            {/* El Voluntario entra a sus pestañas */}
+            <Stack.Screen name="VolunteerHome" component={VolunteerTabs} options={{ headerShown: false }} />
+            {/* La grabadora se abre por encima */}
+            <Stack.Screen name="VolunteerDashboard" component={VolunteerDashboard} options={{ title: 'Grabar Audio', headerBackTitle: 'Volver' }} />
           </>
         )
       )}

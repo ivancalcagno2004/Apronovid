@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "985023057997",
+    "project_id": "apronovid-b62ba",
+    "storage_bucket": "apronovid-b62ba.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:985023057997:android:5d7a49a4372187bc144c04",
+        "android_client_info": {
+          "package_name": "com.apronovid.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCtGzog5tFd_K3u1RJbCnI7cnA4DqqOeQQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

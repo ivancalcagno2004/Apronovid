@@ -1,32 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { Audio } from 'expo-av';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import api from '../../services/api';
+import { Theme } from '../../styles/theme';
+
+import AudioPlayer from '../utils/AudioPlayer';
+
+const logoMedalla = require('../../../assets/favicon.png');
+const SERVER_URL = 'http://192.168.0.104:3333'; 
 
 interface ReadingRequest {
   id: number;
   title: string;
+  description_or_text: string;
   status: string;
   audio_path: string | null;
 }
 
-const SERVER_URL = 'http://192.168.0.104:3333'; 
-
 export default function ReaderHistory({ navigation }: any) {
   const [requests, setRequests] = useState<ReadingRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  
+  // 2. Solo necesitamos saber qué ID está sonando para avisarle a los demás que se callen
   const [playingId, setPlayingId] = useState<number | null>(null);
+
+  const [isEditModalVisible, setEditModalVisible] = useState(false);
+  const [editingRequest, setEditingRequest] = useState<ReadingRequest | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editText, setEditText] = useState('');
 
   useEffect(() => {
     fetchMyRequests();
-    
-    // Limpieza de memoria: si sale de la pantalla, frenamos el audio
-    return () => {
-      if (sound) {
-        sound.unloadAsync();
-      }
-    };
   }, []);
 
   const fetchMyRequests = async () => {
@@ -41,66 +44,79 @@ export default function ReaderHistory({ navigation }: any) {
     }
   };
 
-  const playAudio = async (audioPath: string, id: number) => {
-    try {
-      // Si ya hay un audio sonando, lo frenamos
-      if (sound) {
-        await sound.stopAsync();
-        await sound.unloadAsync();
-        if (playingId === id) {
-          setSound(null);
-          setPlayingId(null);
-          return; // Si tocaste el mismo que estaba sonando, funciona como "Pausa/Stop"
+  const handleDelete = (id: number) => {
+    Alert.alert("Eliminar pedido", "¿Estás seguro de que querés borrar esta solicitud?", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Eliminar", style: "destructive", onPress: async () => {
+          try {
+            await api.delete(`/reading-requests/${id}`);
+            Alert.alert("Éxito", "Pedido eliminado.");
+            fetchMyRequests(); 
+          } catch (error: any) {
+            Alert.alert("Error", error.response?.data?.message || "No se pudo eliminar.");
+          }
         }
       }
+    ]);
+  };
 
-      // Preparamos la URL pública de Laravel
-      const audioUrl = `${SERVER_URL}/storage/${audioPath}`;
+  const openEditModal = (item: ReadingRequest) => {
+    setEditingRequest(item);
+    setEditTitle(item.title);
+    setEditText(item.description_or_text || '');
+    setEditModalVisible(true);
+  };
 
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: audioUrl },
-        { shouldPlay: true }
-      );
-
-      setSound(newSound);
-      setPlayingId(id);
-
-      // Cuando termina de sonar, reseteamos el botón
-      newSound.setOnPlaybackStatusUpdate((status: any) => {
-        if (status.isLoaded && status.didJustFinish) {
-          setPlayingId(null);
-        }
-      });
-
-    } catch (error) {
-      console.error('Error al reproducir:', error);
-      Alert.alert('Error', 'No se pudo reproducir la grabación.');
+  const saveEdit = async () => {
+    if (!editingRequest) return;
+    try {
+      await api.put(`/reading-requests/${editingRequest.id}`, { title: editTitle, description_or_text: editText });
+      Alert.alert("Éxito", "Pedido actualizado.");
+      setEditModalVisible(false);
+      fetchMyRequests();
+    } catch (error: any) {
+      Alert.alert("Error", error.response?.data?.message || "No se pudo editar.");
     }
   };
 
   const renderItem = ({ item }: { item: ReadingRequest }) => {
     const isCompleted = item.status === 'completed' && item.audio_path;
-    const isPlaying = playingId === item.id;
+    const isPending = item.status === 'pending';
+    const isValidating = item.status === 'validating';
 
     return (
-      <View style={styles.card} accessible={true}>
-        <Text style={styles.cardTitle}>{item.title}</Text>
-        <Text style={styles.cardStatus}>
-          Estado: {isCompleted ? 'Listo para escuchar' : 'Pendiente de lectura'}
-        </Text>
-
-        {isCompleted && (
-          <TouchableOpacity 
-            style={[styles.playButton, isPlaying && styles.stopButton]}
-            onPress={() => playAudio(item.audio_path!, item.id)}
-            accessible={true}
-            accessibilityRole="button"
-            accessibilityLabel={isPlaying ? `Detener audio de ${item.title}` : `Escuchar audio de ${item.title}`}
-          >
-            <Text style={styles.playButtonText}>
-              {isPlaying ? '⏹️ Detener Audio' : '▶️ Escuchar Audio'}
+      <View style={[styles.card, isCompleted ? styles.cardCompleted : styles.cardPending]}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>{item.title}</Text>
+          <View style={[styles.statusBadge, isCompleted ? styles.badgeSuccess : (isValidating ? styles.badgeValidating : styles.badgePending)]}>
+            <Text style={styles.statusText}>
+              {isCompleted ? 'LISTO' : (isValidating ? 'EVALUANDO' : 'EN ESPERA')}
             </Text>
-          </TouchableOpacity>
+          </View>
+        </View>
+
+        {isCompleted ? (
+          /* 3. ACÁ INYECTAMOS NUESTRO REPRODUCTOR MODULAR */
+          <AudioPlayer 
+            audioUrl={`${SERVER_URL}/storage/${item.audio_path}`} 
+            id={item.id} 
+            activeId={playingId} 
+            onPlay={setPlayingId} 
+          />
+        ) : (
+          <View>
+            <Text style={styles.pendingText}>{isValidating ? 'Un voluntario grabó esto. La IA lo está revisando.' : 'Aún no ha sido grabado por un voluntario.'}</Text>
+            {isPending && (
+              <View style={styles.actionButtonsRow}>
+                <TouchableOpacity onPress={() => openEditModal(item)} style={styles.editBtn}>
+                  <Text style={styles.actionTextBtn}>✏️ Editar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => handleDelete(item.id)} style={styles.deleteBtn}>
+                  <Text style={[styles.actionTextBtn, {color: Theme.colors.danger}]}>🗑️ Borrar</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         )}
       </View>
     );
@@ -108,10 +124,22 @@ export default function ReaderHistory({ navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title} accessibilityRole="header">Mis Pedidos</Text>
+      <View style={styles.header}>
+        <View style={styles.headerBrand}>
+          <Image source={logoMedalla} style={styles.headerLogo} />
+          <Text style={styles.title}>Mis Audios</Text>
+        </View>
+        <TouchableOpacity onPress={fetchMyRequests} style={styles.refreshButton}>
+          <Text style={styles.refreshText}>🔄</Text>
+        </TouchableOpacity>
+      </View>
       
       {isLoading ? (
-        <ActivityIndicator size="large" color="#0D6EFD" />
+        <ActivityIndicator size="large" color={Theme.colors.primary} style={{ marginTop: 50 }} />
+      ) : requests.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyText}>Todavía no tenés pedidos. ¡Aprovechá para pedir tu primera lectura!</Text>
+        </View>
       ) : (
         <FlatList
           data={requests}
@@ -122,28 +150,62 @@ export default function ReaderHistory({ navigation }: any) {
         />
       )}
 
-      <TouchableOpacity 
-        style={styles.backButton}
-        onPress={() => navigation.navigate('ReaderDashboard')}
-        accessible={true}
-        accessibilityRole="button"
-        accessibilityLabel="Volver a la pantalla de pedir un nuevo audio"
-      >
-        <Text style={styles.backButtonText}>⬅️ Volver a Pedir</Text>
-      </TouchableOpacity>
+      {/* Modal de edición */}
+      <Modal visible={isEditModalVisible} animationType="slide" transparent={true}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Editar Pedido</Text>
+            <Text style={styles.label}>Título</Text>
+            <TextInput style={styles.input} value={editTitle} onChangeText={setEditTitle} />
+            <Text style={styles.label}>Texto a leer</Text>
+            <TextInput style={[styles.input, styles.textArea]} value={editText} onChangeText={setEditText} multiline numberOfLines={4} />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity onPress={() => setEditModalVisible(false)} style={styles.cancelModalBtn}><Text style={styles.cancelText}>Cancelar</Text></TouchableOpacity>
+              <TouchableOpacity onPress={saveEdit} style={styles.saveModalBtn}><Text style={styles.saveText}>Guardar</Text></TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA', padding: 24 },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#212529', marginBottom: 24 },
-  card: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, marginBottom: 16, elevation: 3 },
-  cardTitle: { fontSize: 20, fontWeight: 'bold', color: '#212529', marginBottom: 8 },
-  cardStatus: { fontSize: 16, color: '#6C757D', marginBottom: 16 },
-  playButton: { backgroundColor: '#198754', paddingVertical: 18, borderRadius: 12, alignItems: 'center' },
-  stopButton: { backgroundColor: '#DC3545' },
-  playButtonText: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
-  backButton: { backgroundColor: '#6C757D', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginTop: 10 },
-  backButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' }
+  container: { flex: 1, backgroundColor: Theme.colors.background, paddingHorizontal: Theme.spacing.padding, paddingTop: Theme.spacing.padding },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: Theme.colors.border },
+  headerBrand: { flexDirection: 'row', alignItems: 'center' },
+  headerLogo: { width: 36, height: 36, marginRight: 12 },
+  title: { fontSize: Theme.text.fontSizeHeader, fontWeight: 'bold', color: Theme.colors.primary },
+  refreshButton: { padding: 10, backgroundColor: Theme.colors.backgroundCard, borderRadius: 8, borderWidth: 1, borderColor: Theme.colors.border },
+  refreshText: { fontSize: Theme.text.fontSizeTitle },
+  
+  card: { backgroundColor: Theme.colors.backgroundCard, padding: 20, borderRadius: Theme.spacing.borderRadiusCard, marginBottom: 16, borderWidth: 1, elevation: 1 },
+  cardCompleted: { borderColor: Theme.colors.success },
+  cardPending: { borderColor: Theme.colors.border },
+  cardHeader: { marginBottom: 16 },
+  cardTitle: { fontSize: Theme.text.fontSizeTitle, fontWeight: 'bold', color: Theme.colors.text, marginBottom: 8 },
+  statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  badgeSuccess: { backgroundColor: '#E8F5E9' }, 
+  badgePending: { backgroundColor: '#E9ECEF' }, 
+  badgeValidating: { backgroundColor: '#FFF3E0' }, 
+  statusText: { fontSize: 12, fontWeight: 'bold', color: Theme.colors.textMuted },
+  pendingText: { fontSize: Theme.text.fontSizeBody, color: Theme.colors.textMuted, fontStyle: 'italic', marginBottom: 12 },
+  actionButtonsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 15, marginTop: 10 },
+  editBtn: { padding: 8 },
+  deleteBtn: { padding: 8 },
+  actionTextBtn: { fontWeight: 'bold', fontSize: Theme.text.fontSizeBody, color: Theme.colors.primary },
+  
+  emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  emptyText: { fontSize: Theme.text.fontSizeBody, color: Theme.colors.textMuted, textAlign: 'center', paddingHorizontal: 20 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
+  modalContent: { backgroundColor: Theme.colors.backgroundCard, padding: 20, borderRadius: 12 },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: Theme.colors.primary, marginBottom: 15 },
+  label: { fontSize: 14, color: Theme.colors.textMuted, marginBottom: 5, fontWeight: 'bold' },
+  input: { backgroundColor: Theme.colors.background, borderWidth: 1, borderColor: Theme.colors.border, borderRadius: 8, padding: 12, marginBottom: 15, fontSize: 16 },
+  textArea: { height: 100, textAlignVertical: 'top' },
+  modalButtons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 10 },
+  cancelModalBtn: { padding: 12 },
+  cancelText: { color: Theme.colors.textMuted, fontWeight: 'bold', fontSize: 16 },
+  saveModalBtn: { backgroundColor: Theme.colors.primary, padding: 12, borderRadius: 8 },
+  saveText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 }
 });
