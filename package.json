@@ -16,6 +16,7 @@
     "axios": "^1.16.1",
     "expo": "~55.0.24",
     "expo-av": "^16.0.8",
+    "expo-build-properties": "~55.0.14",
     "expo-dev-client": "~55.0.34",
     "expo-device": "~55.0.17",
     "expo-document-picker": "~55.0.13",

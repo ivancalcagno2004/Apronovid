@@ -17,8 +17,7 @@
     },
     "android": {
       "package": "com.apronovid.app",
-      "googleServicesFile": "./google-services.json",
-      "usesCleartextTraffic": true
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -27,10 +26,17 @@
       "expo-secure-store",
       [
         "expo-notifications",
-          {
-            "icon": "./assets/favicon.png",
-            "color": "#ffffff"
+        {
+          "icon": "./assets/favicon.png",
+          "color": "#ffffff"
+        }
+      ],[
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
           }
+        }
       ]
     ],
     "extra": {
