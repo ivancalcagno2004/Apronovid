@@ -33,6 +33,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/my-reading-requests', [ReadingRequestController::class, 'myRequests']);
     Route::put('/reading-requests/{id}', [ReadingRequestController::class, 'update']);
     Route::delete('/reading-requests/{id}', [ReadingRequestController::class, 'destroy']);
+    Route::get('/catalog', [ReadingRequestController::class, 'catalog']);
 
     // --- AUDIOS Y GRABACIONES ---
     Route::post('/reading-requests/{id}/audio', [ReadingRequestController::class, 'uploadAudio']);

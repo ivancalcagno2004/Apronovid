@@ -2,7 +2,7 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
 // Configuración de la IP según el entorno
-const BASE_URL = 'http://192.168.0.104:3333/api';
+const BASE_URL = 'http://20.88.17.113/api';
 
 const api = axios.create({
   baseURL: BASE_URL,

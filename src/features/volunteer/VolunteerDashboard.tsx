@@ -6,7 +6,7 @@ import * as Notifications from 'expo-notifications';
 import api from '../../services/api';
 import { Theme } from '../../styles/theme';
 
-const SERVER_URL = 'http://192.168.0.104:3333'; 
+const SERVER_URL = 'http://20.88.17.113'; 
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({

@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, KeyboardAvoidingView, Platform, Image, Switch } from 'react-native';
 import api from '../../services/api';
 import { Theme } from '../../styles/theme';
 
 import AudioPlayer from '../utils/AudioPlayer';
 
 const logoMedalla = require('../../../assets/favicon.png');
-const SERVER_URL = 'http://192.168.0.104:3333'; 
+const SERVER_URL = 'http://20.88.17.113'; 
 
 interface ReadingRequest {
   id: number;
@@ -14,19 +14,21 @@ interface ReadingRequest {
   description_or_text: string;
   status: string;
   audio_path: string | null;
+  is_public: boolean; // 🆕 Agregado a la interfaz
 }
 
 export default function ReaderHistory({ navigation }: any) {
   const [requests, setRequests] = useState<ReadingRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  
-  // 2. Solo necesitamos saber qué ID está sonando para avisarle a los demás que se callen
   const [playingId, setPlayingId] = useState<number | null>(null);
 
   const [isEditModalVisible, setEditModalVisible] = useState(false);
   const [editingRequest, setEditingRequest] = useState<ReadingRequest | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editText, setEditText] = useState('');
+  
+  // 🆕 Estado para el switch en el modal de edición
+  const [editIsPublic, setEditIsPublic] = useState(false);
 
   useEffect(() => {
     fetchMyRequests();
@@ -64,13 +66,19 @@ export default function ReaderHistory({ navigation }: any) {
     setEditingRequest(item);
     setEditTitle(item.title);
     setEditText(item.description_or_text || '');
+    setEditIsPublic(!!item.is_public); // 🆕 Convertimos a booleano estricto por las dudas
     setEditModalVisible(true);
   };
 
   const saveEdit = async () => {
     if (!editingRequest) return;
     try {
-      await api.put(`/reading-requests/${editingRequest.id}`, { title: editTitle, description_or_text: editText });
+      // 🆕 Agregamos is_public al JSON que mandamos a Laravel
+      await api.put(`/reading-requests/${editingRequest.id}`, { 
+        title: editTitle, 
+        description_or_text: editText,
+        is_public: editIsPublic
+      });
       Alert.alert("Éxito", "Pedido actualizado.");
       setEditModalVisible(false);
       fetchMyRequests();
@@ -88,15 +96,23 @@ export default function ReaderHistory({ navigation }: any) {
       <View style={[styles.card, isCompleted ? styles.cardCompleted : styles.cardPending]}>
         <View style={styles.cardHeader}>
           <Text style={styles.cardTitle}>{item.title}</Text>
-          <View style={[styles.statusBadge, isCompleted ? styles.badgeSuccess : (isValidating ? styles.badgeValidating : styles.badgePending)]}>
-            <Text style={styles.statusText}>
-              {isCompleted ? 'LISTO' : (isValidating ? 'EVALUANDO' : 'EN ESPERA')}
-            </Text>
+          <View style={styles.badgesRow}>
+            <View style={[styles.statusBadge, isCompleted ? styles.badgeSuccess : (isValidating ? styles.badgeValidating : styles.badgePending)]}>
+              <Text style={styles.statusText}>
+                {isCompleted ? 'LISTO' : (isValidating ? 'EVALUANDO' : 'EN ESPERA')}
+              </Text>
+            </View>
+            
+            {/* 🆕 Distintivo visual para saber si es público o privado */}
+            <View style={[styles.privacyBadge, item.is_public ? styles.badgePublic : styles.badgePrivate]}>
+              <Text style={styles.privacyText}>
+                {item.is_public ? '👁️ Público' : '🔒 Privado'}
+              </Text>
+            </View>
           </View>
         </View>
 
         {isCompleted ? (
-          /* 3. ACÁ INYECTAMOS NUESTRO REPRODUCTOR MODULAR */
           <AudioPlayer 
             audioUrl={`${SERVER_URL}/storage/${item.audio_path}`} 
             id={item.id} 
@@ -159,6 +175,18 @@ export default function ReaderHistory({ navigation }: any) {
             <TextInput style={styles.input} value={editTitle} onChangeText={setEditTitle} />
             <Text style={styles.label}>Texto a leer</Text>
             <TextInput style={[styles.input, styles.textArea]} value={editText} onChangeText={setEditText} multiline numberOfLines={4} />
+            
+            {/* 🆕 Switch de privacidad en el modal de edición */}
+            <View style={styles.modalSwitchContainer}>
+              <Text style={styles.label}>Compartir en el Catálogo Público</Text>
+              <Switch
+                trackColor={{ false: Theme.colors.border, true: Theme.colors.success }}
+                thumbColor="#FFF"
+                onValueChange={setEditIsPublic}
+                value={editIsPublic}
+              />
+            </View>
+
             <View style={styles.modalButtons}>
               <TouchableOpacity onPress={() => setEditModalVisible(false)} style={styles.cancelModalBtn}><Text style={styles.cancelText}>Cancelar</Text></TouchableOpacity>
               <TouchableOpacity onPress={saveEdit} style={styles.saveModalBtn}><Text style={styles.saveText}>Guardar</Text></TouchableOpacity>
@@ -184,11 +212,21 @@ const styles = StyleSheet.create({
   cardPending: { borderColor: Theme.colors.border },
   cardHeader: { marginBottom: 16 },
   cardTitle: { fontSize: Theme.text.fontSizeTitle, fontWeight: 'bold', color: Theme.colors.text, marginBottom: 8 },
-  statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  
+  // 🆕 Modificamos las pastillas (badges) para que se pongan una al lado de la otra
+  badgesRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   badgeSuccess: { backgroundColor: '#E8F5E9' }, 
   badgePending: { backgroundColor: '#E9ECEF' }, 
   badgeValidating: { backgroundColor: '#FFF3E0' }, 
   statusText: { fontSize: 12, fontWeight: 'bold', color: Theme.colors.textMuted },
+  
+  // 🆕 Estilos del badge de privacidad
+  privacyBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  badgePublic: { backgroundColor: '#E3F2FD', borderColor: '#90CAF9' },
+  badgePrivate: { backgroundColor: '#FAFAFA', borderColor: '#E0E0E0' },
+  privacyText: { fontSize: 12, fontWeight: 'bold', color: '#555' },
+
   pendingText: { fontSize: Theme.text.fontSizeBody, color: Theme.colors.textMuted, fontStyle: 'italic', marginBottom: 12 },
   actionButtonsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 15, marginTop: 10 },
   editBtn: { padding: 8 },
@@ -203,6 +241,10 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, color: Theme.colors.textMuted, marginBottom: 5, fontWeight: 'bold' },
   input: { backgroundColor: Theme.colors.background, borderWidth: 1, borderColor: Theme.colors.border, borderRadius: 8, padding: 12, marginBottom: 15, fontSize: 16 },
   textArea: { height: 100, textAlignVertical: 'top' },
+  
+  // 🆕 Contenedor del Switch en el modal
+  modalSwitchContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, marginTop: 5 },
+
   modalButtons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 10 },
   cancelModalBtn: { padding: 12 },
   cancelText: { color: Theme.colors.textMuted, fontWeight: 'bold', fontSize: 16 },

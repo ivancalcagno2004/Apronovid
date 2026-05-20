@@ -6,7 +6,7 @@ import AudioPlayer from '../utils/AudioPlayer'; // Usamos el reproductor modular
 import { Ionicons } from '@expo/vector-icons';
 
 const logoMedalla = require('../../../assets/favicon.png');
-const SERVER_URL = 'http://192.168.0.104:3333'; 
+const SERVER_URL = 'http://20.88.17.113'; 
 
 interface Recording {
   id: number;

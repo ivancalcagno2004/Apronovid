@@ -9,7 +9,7 @@ class ReadingRequest extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['oyente_id', 'title', 'description_or_text', 'status', 'file_path', 'audio_path', 'voluntario_id'];
+    protected $fillable = ['oyente_id', 'title', 'description_or_text', 'status', 'file_path', 'audio_path', 'voluntario_id', 'is_public'];
 
     public function oyente()
     {

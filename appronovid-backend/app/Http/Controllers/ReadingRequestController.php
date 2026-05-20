@@ -15,12 +15,12 @@ class ReadingRequestController extends Controller
         $request->validate([
             'title' => 'required|string|max:255',
             'description_or_text' => 'nullable|string',
-            'file' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240', // Aceptamos PDF e Imágenes
+            'file' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'is_public' => 'nullable|boolean', // 🆕 Agregamos la validación
         ]);
 
         $textoFinal = $request->description_or_text ?? '';
 
-        // Si el usuario subió un archivo, vamos a intentar escanearlo
         if ($request->hasFile('file')) {
             $file = $request->file('file');
             $extension = strtolower($file->getClientOriginalExtension());
@@ -28,30 +28,24 @@ class ReadingRequestController extends Controller
             // CASO A: Es un archivo PDF
             if ($extension === 'pdf') {
                 try {
-                    $parser = new PdfParser();
+                    $parser = new \Smalot\PdfParser\Parser();
                     $pdf = $parser->parseFile($file->getRealPath());
-
-                    // Extraemos todo el texto legible del PDF
                     $textoExtraido = $pdf->getText();
 
                     if (!empty(trim($textoExtraido))) {
-                        // Si el usuario también escribió algo en la caja de texto, lo sumamos
                         $textoFinal = !empty($textoFinal)
                             ? $textoFinal . "\n\n--- Texto escaneado del PDF ---\n" . $textoExtraido
                             : $textoExtraido;
                     }
                 } catch (\Exception $e) {
-                    Log::error("Error extrayendo texto de PDF: " . $e->getMessage());
-                    // Si falla el parseo, no trabamos la app, se guarda el archivo igual
+                    \Illuminate\Support\Facades\Log::error("Error extrayendo texto de PDF: " . $e->getMessage());
                 }
             }
-
             // CASO B: Es una Foto / Imagen (JPG, JPEG, PNG)
             elseif (in_array($extension, ['jpg', 'jpeg', 'png'])) {
                 try {
-                    // Usamos el modelo 'trocr' de Microsoft en Hugging Face (Es gratis y excelente para OCR)
-                    $response = Http::withHeaders([
-                        'Authorization' => 'Bearer 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',
+                    $response = \Illuminate\Support\Facades\Http::withHeaders([
+                        'Authorization' => 'Bearer ' . env('HUGGINGFACE_TOKEN'),
                         'Content-Type' => $file->getMimeType(),
                     ])->withBody(
                         file_get_contents($file->getRealPath()),
@@ -60,7 +54,6 @@ class ReadingRequestController extends Controller
 
                     if ($response->successful()) {
                         $resultado = $response->json();
-                        // Este modelo devuelve un array con la propiedad 'generated_text'
                         $textoEscaneado = $resultado[0]['generated_text'] ?? '';
 
                         if (!empty(trim($textoEscaneado))) {
@@ -70,7 +63,7 @@ class ReadingRequestController extends Controller
                         }
                     }
                 } catch (\Exception $e) {
-                    Log::error("Error en OCR de imagen con HuggingFace: " . $e->getMessage());
+                    \Illuminate\Support\Facades\Log::error("Error en OCR de imagen con HuggingFace: " . $e->getMessage());
                 }
             }
 
@@ -80,12 +73,16 @@ class ReadingRequestController extends Controller
         }
 
         // Guardamos en la base de datos
-        $readingRequest = new ReadingRequest();
+        $readingRequest = new \App\Models\ReadingRequest();
         $readingRequest->title = $request->title;
         $readingRequest->description_or_text = $textoFinal;
         $readingRequest->file_path = $path;
         $readingRequest->status = 'pending';
         $readingRequest->oyente_id = $request->user()->id;
+
+        // 🆕 Interpretamos si el oyente activó el "switch" en el frontend
+        $readingRequest->is_public = $request->has('is_public') ? filter_var($request->is_public, FILTER_VALIDATE_BOOLEAN) : false;
+
         $readingRequest->save();
 
         return response()->json([
@@ -170,9 +167,10 @@ class ReadingRequestController extends Controller
         $request->validate([
             'title' => 'sometimes|string|max:255',
             'description_or_text' => 'sometimes|string',
+            'is_public' => 'sometimes|boolean'
         ]);
 
-        $readingRequest->update($request->only(['title', 'description_or_text']));
+        $readingRequest->update($request->only(['title', 'description_or_text', 'is_public']));
 
         return response()->json(['message' => 'Pedido actualizado con éxito.', 'data' => $readingRequest]);
     }
@@ -196,5 +194,24 @@ class ReadingRequestController extends Controller
         $readingRequest->delete();
 
         return response()->json(['message' => 'Pedido eliminado correctamente.']);
+    }
+
+    public function catalog(Request $request)
+    {
+        // Solo traemos los públicos que ya tienen audio (completados)
+        $query = \App\Models\ReadingRequest::where('is_public', true)
+            ->where('status', 'completed');
+
+        // Si el oyente escribió algo en el buscador
+        if ($request->has('search') && !empty($request->search)) {
+            $query->where('title', 'like', '%' . $request->search . '%');
+        }
+
+        $catalog = $query->orderBy('updated_at', 'desc')->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $catalog
+        ]);
     }
 }
