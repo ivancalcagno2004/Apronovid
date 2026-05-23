@@ -9,7 +9,7 @@ class ReadingRequest extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['oyente_id', 'title', 'description_or_text', 'status', 'file_path', 'audio_path', 'voluntario_id', 'is_public'];
+    protected $fillable = ['oyente_id', 'title', 'description_or_text', 'status', 'file_path', 'audio_path', 'voluntario_id', 'is_public', 'category_id'];
 
     public function oyente()
     {
@@ -19,5 +19,10 @@ class ReadingRequest extends Model
     public function tasks()
     {
         return $this->hasMany(TaskQueue::class);
+    }
+
+    public function category()
+    {
+        return $this->belongsTo(Category::class);
     }
 }

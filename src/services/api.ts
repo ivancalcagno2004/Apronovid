@@ -1,11 +1,15 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
-// Configuración de la IP según el entorno
-const BASE_URL = 'http://20.88.17.113/api';
+// Si estamos en Expo Go (__DEV__ es true), usa la IP de tu computadora.
+// Si es el APK de EAS (__DEV__ es false), usa la IP de Azure.
+
+export const SERVER_URL = __DEV__ 
+  ? 'http://192.168.0.106:3333'  // <-- Tu backend local (verificá que siga siendo esta tu IP de Wi-Fi)
+  : 'http://20.88.17.113';       // <-- Tu backend en Azure
 
 const api = axios.create({
-  baseURL: BASE_URL,
+  baseURL: `${SERVER_URL}/api`,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json', // Requerido por Laravel para responder en JSON ante errores

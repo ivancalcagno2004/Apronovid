@@ -2,6 +2,7 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { User } from '../types/auth';
 import api from '../services/api';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 type AuthContextType = {
   user: User | null;
@@ -46,6 +47,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       // Avisamos a Laravel Sanctum que revoque el token actual
       await api.post('/logout');
+      const isSignedIn = await GoogleSignin.hasPreviousSignIn();
+      if (isSignedIn) {
+        await GoogleSignin.signOut();
+      }
     } catch (e) {
       console.log('Error al cerrar sesión en el servidor');
     } finally {

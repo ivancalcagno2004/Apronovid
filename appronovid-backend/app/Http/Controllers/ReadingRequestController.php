@@ -14,9 +14,10 @@ class ReadingRequestController extends Controller
     {
         $request->validate([
             'title' => 'required|string|max:255',
+            'category_id' => 'required|exists:categories,id', // 🌟 NUEVO: Validamos la categoría
             'description_or_text' => 'nullable|string',
             'file' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
-            'is_public' => 'nullable|boolean', // 🆕 Agregamos la validación
+            'is_public' => 'nullable|boolean',
         ]);
 
         $textoFinal = $request->description_or_text ?? '';
@@ -41,29 +42,54 @@ class ReadingRequestController extends Controller
                     \Illuminate\Support\Facades\Log::error("Error extrayendo texto de PDF: " . $e->getMessage());
                 }
             }
-            // CASO B: Es una Foto / Imagen (JPG, JPEG, PNG)
+            // CASO B: Es una Foto / Imagen (JPG, JPEG, PNG) - AHORA CON OCR.SPACE (100% Gratis)
             elseif (in_array($extension, ['jpg', 'jpeg', 'png'])) {
                 try {
-                    $response = \Illuminate\Support\Facades\Http::withHeaders([
-                        'Authorization' => 'Bearer ' . env('HUGGINGFACE_TOKEN'),
-                        'Content-Type' => $file->getMimeType(),
-                    ])->withBody(
-                        file_get_contents($file->getRealPath()),
-                        $file->getMimeType()
-                    )->post('https://api-inference.huggingface.co/models/microsoft/trocr-large-printed');
+                    $base64Image = base64_encode(file_get_contents($file->getRealPath()));
+                    $mimeType = $file->getMimeType();
+                    $dataUri = "data:{$mimeType};base64,{$base64Image}";
+
+                    // 1. Hacemos la petición a la API gratuita de OCR.space
+                    $response = \Illuminate\Support\Facades\Http::withoutVerifying()
+                        ->timeout(60)
+                        ->asForm() // OCR.space requiere formato de formulario, no JSON
+                        ->post('https://api.ocr.space/parse/image', [
+                            'apikey' => 'helloworld', // Clave pública gratuita (podés registrar la tuya gratis en su web)
+                            'base64Image' => $dataUri,
+                            'language' => 'spa', // Seteado en español para que lea bien las 'ñ' y tildes
+                            'scale' => 'true',   // Agranda la imagen internamente para leer mejor
+                            'OCREngine' => '2'   // Usa su motor más avanzado
+                        ]);
 
                     if ($response->successful()) {
                         $resultado = $response->json();
-                        $textoEscaneado = $resultado[0]['generated_text'] ?? '';
+
+                        // Verificamos si la API de OCR tuvo algún problema procesando la foto
+                        if (isset($resultado['IsErroredOnProcessing']) && $resultado['IsErroredOnProcessing']) {
+                            \Illuminate\Support\Facades\Log::error("OCR.space falló: " . json_encode($resultado['ErrorMessage']));
+                            return response()->json(['message' => 'Error al leer la imagen. Intentá con otra más nítida.'], 422);
+                        }
+
+                        // 2. Extraemos y juntamos el texto reconocido
+                        $textoEscaneado = '';
+                        if (isset($resultado['ParsedResults']) && count($resultado['ParsedResults']) > 0) {
+                            $textoEscaneado = $resultado['ParsedResults'][0]['ParsedText'] ?? '';
+                        }
 
                         if (!empty(trim($textoEscaneado))) {
                             $textoFinal = !empty($textoFinal)
-                                ? $textoFinal . "\n\n--- Texto escaneado de la foto ---\n" . $textoEscaneado
-                                : $textoEscaneado;
+                                ? $textoFinal . "\n\n--- Texto escaneado de la foto ---\n" . trim($textoEscaneado)
+                                : trim($textoEscaneado);
+                        } else {
+                            return response()->json(['message' => 'No se pudo encontrar texto legible en esta imagen.'], 422);
                         }
+                    } else {
+                        \Illuminate\Support\Facades\Log::error("Error de conexión con OCR.space");
+                        return response()->json(['message' => 'Error de conexión con el servidor de lectura.'], 422);
                     }
                 } catch (\Exception $e) {
-                    \Illuminate\Support\Facades\Log::error("Error en OCR de imagen con HuggingFace: " . $e->getMessage());
+                    \Illuminate\Support\Facades\Log::error("Error procesando imagen: " . $e->getMessage());
+                    return response()->json(['message' => 'Error interno procesando la imagen.'], 500);
                 }
             }
 
@@ -75,12 +101,11 @@ class ReadingRequestController extends Controller
         // Guardamos en la base de datos
         $readingRequest = new \App\Models\ReadingRequest();
         $readingRequest->title = $request->title;
+        $readingRequest->category_id = $request->category_id; // 🌟 NUEVO: Guardamos la categoría
         $readingRequest->description_or_text = $textoFinal;
         $readingRequest->file_path = $path;
         $readingRequest->status = 'pending';
         $readingRequest->oyente_id = $request->user()->id;
-
-        // 🆕 Interpretamos si el oyente activó el "switch" en el frontend
         $readingRequest->is_public = $request->has('is_public') ? filter_var($request->is_public, FILTER_VALIDATE_BOOLEAN) : false;
 
         $readingRequest->save();
@@ -110,13 +135,11 @@ class ReadingRequestController extends Controller
 
         $readingRequest = \App\Models\ReadingRequest::findOrFail($id);
 
-        // El pedido pasa a estar en cuarentena (evaluando)
         $readingRequest->status = 'validating';
         $readingRequest->save();
 
         $path = $request->file('audio')->store('audios', 'public');
 
-        // 🆕 CREAMOS EL REGISTRO DE LA GRABACIÓN ESPECÍFICA
         $recording = \App\Models\VolunteerRecording::create([
             'reading_request_id' => $readingRequest->id,
             'volunteer_id' => $request->user()->id,
@@ -124,7 +147,6 @@ class ReadingRequestController extends Controller
             'status' => 'validating'
         ]);
 
-        // 🔔 Notificación push inmediata al voluntario
         $voluntario = $request->user();
         if ($voluntario->expo_push_token) {
             \Illuminate\Support\Facades\Http::withoutVerifying()->post('https://exp.host/--/api/v2/push/send', [
@@ -135,7 +157,6 @@ class ReadingRequestController extends Controller
             ]);
         }
 
-        // Despachamos el Job pasándole el ID de la GRABACIÓN, no del pedido
         \App\Jobs\ValidateAudioJob::dispatch($recording->id);
 
         return response()->json(['message' => '¡Audio recibido! Procesando calidad.']);
@@ -143,7 +164,6 @@ class ReadingRequestController extends Controller
 
     public function myRequests(Request $request)
     {
-        // Traemos solo los pedidos del oyente que está logueado 
         $requests = ReadingRequest::where('oyente_id', $request->user()->id)
             ->orderBy('created_at', 'desc')
             ->get();
@@ -153,7 +173,6 @@ class ReadingRequestController extends Controller
         ]);
     }
 
-    // Actualizar un pedido
     public function update(Request $request, $id)
     {
         $readingRequest = ReadingRequest::where('id', $id)
@@ -166,11 +185,13 @@ class ReadingRequestController extends Controller
 
         $request->validate([
             'title' => 'sometimes|string|max:255',
+            'category_id' => 'sometimes|exists:categories,id', // 🌟 NUEVO: Validamos si lo edita
             'description_or_text' => 'sometimes|string',
             'is_public' => 'sometimes|boolean'
         ]);
 
-        $readingRequest->update($request->only(['title', 'description_or_text', 'is_public']));
+        // 🌟 NUEVO: Sumamos la categoría a los campos que se pueden actualizar
+        $readingRequest->update($request->only(['title', 'category_id', 'description_or_text', 'is_public']));
 
         return response()->json(['message' => 'Pedido actualizado con éxito.', 'data' => $readingRequest]);
     }
@@ -178,12 +199,17 @@ class ReadingRequestController extends Controller
     // Eliminar un pedido
     public function destroy(Request $request, $id)
     {
-        $readingRequest = ReadingRequest::where('id', $id)
-            ->where('oyente_id', $request->user()->id)
-            ->firstOrFail();
+        $readingRequest = \App\Models\ReadingRequest::findOrFail($id);
 
-        if ($readingRequest->status !== 'pending') {
-            return response()->json(['message' => 'No podés eliminar un pedido en proceso. Contactá a soporte si necesitás bajarlo.'], 403);
+        // 🌟 MAGIA: Permitimos borrar si es un Administrador, O si es el Oyente que lo creó.
+        if ($request->user()->role !== 'admin' && $readingRequest->oyente_id !== $request->user()->id) {
+            return response()->json(['message' => 'No tienes permiso para eliminar este pedido.'], 403);
+        }
+
+        // Si es un oyente intentando borrar, no lo dejamos si ya está en proceso.
+        // (El admin sí puede borrarlo en cualquier momento).
+        if ($request->user()->role !== 'admin' && $readingRequest->status !== 'pending') {
+            return response()->json(['message' => 'No podés eliminar un pedido en proceso.'], 403);
         }
 
         // Si tiene una imagen asociada, la borramos del storage
@@ -198,11 +224,9 @@ class ReadingRequestController extends Controller
 
     public function catalog(Request $request)
     {
-        // Solo traemos los públicos que ya tienen audio (completados)
         $query = \App\Models\ReadingRequest::where('is_public', true)
             ->where('status', 'completed');
 
-        // Si el oyente escribió algo en el buscador
         if ($request->has('search') && !empty($request->search)) {
             $query->where('title', 'like', '%' . $request->search . '%');
         }

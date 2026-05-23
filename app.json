@@ -30,14 +30,16 @@
           "icon": "./assets/favicon.png",
           "color": "#ffffff"
         }
-      ],[
+      ],
+      [
         "expo-build-properties",
         {
           "android": {
             "usesCleartextTraffic": true
           }
         }
-      ]
+      ],
+      "@react-native-google-signin/google-signin"
     ],
     "extra": {
       "eas": {

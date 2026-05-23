@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
@@ -14,7 +15,7 @@ class AuthController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8',
-            'role' => 'required|in:oyente,voluntario',
+            'role' => 'required|in:oyente,narrador',
         ]);
 
         $user = User::create([
@@ -57,12 +58,10 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
-        // Elimina el token actual que está usando el dispositivo
+        // Elimina el token actual que usó el usuario para hacer esta petición
         $request->user()->currentAccessToken()->delete();
 
-        return response()->json([
-            'message' => 'Sesión cerrada correctamente'
-        ]);
+        return response()->json(['message' => 'Sesión cerrada correctamente'], 200);
     }
 
     public function updateEmail(Request $request)
@@ -96,5 +95,51 @@ class AuthController extends Controller
         $user->save();
 
         return response()->json(['message' => 'Contraseña actualizada con éxito']);
+    }
+
+    public function googleAuth(Request $request)
+    {
+        // Validamos que el frontend nos mande los datos mínimos de Google
+        $request->validate([
+            'email' => 'required|email',
+            'name' => 'required|string',
+            // El rol solo será obligatorio si estamos creando una cuenta nueva
+            'role' => 'sometimes|in:oyente,narrador',
+        ]);
+
+        // Buscamos si el usuario ya existe
+        $user = User::where('email', $request->email)->first();
+
+        if ($user) {
+            // ESCENARIO A: El usuario ya existía (Hizo Login)
+            $token = $user->createToken('auth_token')->plainTextToken;
+
+            return response()->json([
+                'message' => 'Login exitoso',
+                'user' => $user,
+                'token' => $token,
+            ], 200);
+        } else {
+            // ESCENARIO B: El usuario no existe (Hizo Registro)
+            // Validamos estrictamente que haya mandado un rol
+            if (!$request->has('role')) {
+                return response()->json(['message' => 'Falta especificar el rol para el registro'], 422);
+            }
+
+            $user = User::create([
+                'name' => $request->name,
+                'email' => $request->email,
+                'password' => Hash::make(Str::random(24)), // Contraseña imposible de adivinar
+                'role' => $request->role, // Guardamos el rol (oyente o narrador)
+            ]);
+
+            $token = $user->createToken('auth_token')->plainTextToken;
+
+            return response()->json([
+                'message' => 'Registro exitoso',
+                'user' => $user,
+                'token' => $token,
+            ], 201);
+        }
     }
 }

@@ -1,19 +1,17 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { Theme } from '../../styles/theme';
 import { Ionicons } from '@expo/vector-icons';
+import * as SecureStore from 'expo-secure-store';
+import Toast from 'react-native-toast-message';
 
 // Importamos el logo oficial
 const logoMedalla = require('../../../assets/favicon.png');
 
-export default function ProfileScreen() {
-  const { user, logout, login } = useAuth();
-
-  // Estados para los formularios
-  const [isEditingEmail, setIsEditingEmail] = useState(false);
-  const [newEmail, setNewEmail] = useState(user?.email || '');
+export default function ProfileScreen({ navigation }: any) {
+  const { user, logout } = useAuth();
   
   const [isEditingPassword, setIsEditingPassword] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
@@ -23,56 +21,59 @@ export default function ProfileScreen() {
   
   const [isLoading, setIsLoading] = useState(false);
 
-  const displayRole = user?.role === 'oyente' ? 'Oyente' : 'Narrador Voluntario';
-
-  const handleUpdateEmail = async () => {
-    if (!newEmail) return Alert.alert('Error', 'Ingresá un nuevo correo.');
-    try {
-      setIsLoading(true);
-      const response = await api.put('/profile/email', { email: newEmail });
-      Alert.alert('Éxito', 'Correo actualizado correctamente.');
-      setIsEditingEmail(false);
-      await login(response.data.user, api.defaults.headers.common['Authorization']?.toString().replace('Bearer ', '') || '');
-    } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'No se pudo actualizar el correo.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  let displayRole = user?.role === 'oyente' ? 'Oyente' : 'Narrador Voluntario';
+  if (user?.role === 'admin') {
+    displayRole = 'Administrador';
+  }
 
   const handleUpdatePassword = async () => {
-    if (!currentPassword || !newPassword) return Alert.alert('Error', 'Completá ambas contraseñas.');
+    if (!currentPassword || !newPassword) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Completá ambas contraseñas.',
+        position: 'bottom',
+        visibilityTime: 7000
+      });
+      return;
+    }
     try {
       setIsLoading(true);
       await api.put('/profile/password', { current_password: currentPassword, new_password: newPassword });
-      Alert.alert('Éxito', 'Contraseña actualizada correctamente.');
+      Toast.show({
+        type: 'success',
+        text1: 'Éxito',
+        text2: 'Contraseña actualizada correctamente.',
+        position: 'bottom',
+        visibilityTime: 7000
+      });
       setIsEditingPassword(false);
       setCurrentPassword('');
       setNewPassword('');
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'No se pudo actualizar la contraseña.');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.response?.data?.message || 'No se pudo actualizar la contraseña.',
+        position: 'bottom',
+        visibilityTime: 7000
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleLogout = async () => {
-    try {
-      setIsLoading(true);
-      const authHeader = api.defaults.headers.common['Authorization'] as string | undefined;
-
-      if (authHeader && authHeader.startsWith('Bearer ') && authHeader.length > 20) {
-        await api.post('/logout', {}, {
-          headers: { 'Authorization': authHeader }
-        });
-      } else {
-        console.log('Token ausente o inválido en memoria. Saltando petición a Laravel.');
-      }
-    } catch (error: any) {
-      console.log('El servidor rechazó el token (probablemente ya expiró o se revocó):', error.response?.status);
-    } finally {
-      await logout();
-    }
+    setIsLoading(true);
+    // Llamamos directamente al contexto, él se encarga de TODO.
+    await logout();
+    Toast.show({
+      type: 'success',
+      text1: 'Sesión Cerrada',
+      text2: 'Cerraste sesión correctamente.',
+      position: 'bottom',
+      visibilityTime: 4000
+    });
   };
 
   return (
@@ -87,36 +88,16 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Tarjeta de Información Principal */}
+        {/* Tarjeta de Información Principal (Nombre y Correo fijos) */}
         <View style={styles.infoCard} accessible={true}>
           <Text style={styles.label}>Nombre:</Text>
           <Text style={styles.value}>{user?.name}</Text>
           
+          <Text style={styles.label}>Correo electrónico:</Text>
+          <Text style={styles.value}>{user?.email}</Text>
+
           <Text style={styles.label}>Tipo de cuenta:</Text>
           <Text style={styles.value}>{displayRole}</Text>
-        </View>
-
-        {/* Sección Modificar Email */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Correo Electrónico</Text>
-          {!isEditingEmail ? (
-            <View style={styles.row}>
-              <Text style={styles.valueRow}>{user?.email}</Text>
-              <TouchableOpacity onPress={() => setIsEditingEmail(true)} accessibilityLabel="Cambiar correo electrónico">
-                <Text style={styles.actionText}>Editar</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View>
-              <TextInput style={styles.input} value={newEmail} onChangeText={setNewEmail} keyboardType="email-address" autoCapitalize="none" accessibilityLabel="Nuevo correo electrónico" />
-              <View style={styles.buttonRow}>
-                <TouchableOpacity onPress={() => setIsEditingEmail(false)} style={styles.cancelBtn}><Text style={styles.cancelText}>Cancelar</Text></TouchableOpacity>
-                <TouchableOpacity onPress={handleUpdateEmail} style={styles.saveBtn} disabled={isLoading}>
-                  {isLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveText}>Guardar</Text>}
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
         </View>
 
         {/* Sección Modificar Contraseña */}
@@ -183,6 +164,10 @@ export default function ProfileScreen() {
           <Text style={styles.logoutText}>🚪 Cerrar Sesión</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity onPress={() => navigation.navigate('Donation')} style={styles.button} accessibilityRole="button" accessibilityLabel="Ir a donaciones">
+            <Text style={styles.donationLink}>Donaciones</Text>
+        </TouchableOpacity>
+
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -217,4 +202,6 @@ const styles = StyleSheet.create({
   passwordContainer: { position: 'relative', justifyContent: 'center' },
   inputWithIcon: { backgroundColor: Theme.colors.background, padding: 14, paddingRight: 50, borderRadius: 8, borderWidth: 1, borderColor: Theme.colors.border, marginBottom: 12, fontSize: Theme.text.fontSizeBody, color: Theme.colors.text },
   eyeButton: { position: 'absolute', right: 15, top: 14, zIndex: 1 },
+  donationLink: { color: Theme.colors.buttonPrimaryText, fontSize: 18, fontWeight: 'bold' },
+  button: { backgroundColor: Theme.colors.buttonPrimary, padding: 18, borderRadius: Theme.spacing.borderRadius, alignItems: 'center', marginTop: 8, elevation: 2 }
 });

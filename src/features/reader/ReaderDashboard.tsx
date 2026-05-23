@@ -1,25 +1,49 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Image, Switch } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Image, Switch } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
+import { Picker } from '@react-native-picker/picker'; // 🌟 Agregamos el Picker
 import api from '../../services/api';
 import { Theme } from '../../styles/theme';
+import Toast from 'react-native-toast-message';
 
 const logoMedalla = require('../../../assets/favicon.png');
+
+// 🌟 Definimos la interfaz para las categorías
+interface Category {
+  id: number;
+  name: string;
+}
 
 export default function ReaderDashboard({ navigation }: any) {
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
   const [file, setFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // 🆕 Estado para el interruptor de privacidad
   const [isPublic, setIsPublic] = useState(false);
+
+  // 🌟 Nuevos estados para las categorías
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<number | string>('');
 
   useEffect(() => {
     registerForPushNotificationsAsync();
+    fetchCategories(); // 🌟 Llamamos a las categorías al abrir la pantalla
   }, []);
+
+  // 🌟 Función para buscar las categorías
+  const fetchCategories = async () => {
+    try {
+      const response = await api.get('/categories');
+      setCategories(response.data);
+      if (response.data.length > 0) {
+        setSelectedCategory(response.data[0].id); // Selecciona la primera por defecto
+      }
+    } catch (error) {
+      console.error('Error cargando categorías:', error);
+    }
+  };
 
   async function registerForPushNotificationsAsync() {
     let token;
@@ -61,7 +85,12 @@ export default function ReaderDashboard({ navigation }: any) {
 
       if (!result.canceled && result.assets.length > 0) {
         setFile(result.assets[0]);
-        Alert.alert('Archivo adjuntado', `Se seleccionó: ${result.assets[0].name}`);
+        Toast.show({
+          type: 'success',
+          text1: 'Archivo adjuntado',
+          text2: `Se seleccionó: ${result.assets[0].name}`,
+          position: 'bottom'
+        });
       }
     } catch (err) {
       console.error('Error al seleccionar documento:', err);
@@ -69,8 +98,14 @@ export default function ReaderDashboard({ navigation }: any) {
   };
 
   const submitRequest = async () => {
-    if (!title || (!text && !file)) {
-      Alert.alert('Faltan datos', 'Ingresá un título y el texto que querés que te lean, o adjuntá un archivo.');
+    // 🌟 Validamos que haya seleccionado una categoría también
+    if (!title || (!text && !file) || !selectedCategory) {
+      Toast.show({
+        type: 'error',
+        text1: 'Faltan datos',
+        text2: 'Ingresá un título, la categoría y el texto/archivo.',
+        position: 'bottom'
+      });
       return;
     }
 
@@ -78,9 +113,8 @@ export default function ReaderDashboard({ navigation }: any) {
       setIsSubmitting(true);
       const formData = new FormData();
       formData.append('title', title);
+      formData.append('category_id', selectedCategory.toString()); // 🌟 Sumamos la categoría al envío
       if (text) formData.append('description_or_text', text);
-      
-      // 🆕 Enviamos el estado del interruptor (1 si es true, 0 si es false)
       formData.append('is_public', isPublic ? '1' : '0');
       
       if (file) {
@@ -95,17 +129,30 @@ export default function ReaderDashboard({ navigation }: any) {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      Alert.alert('¡Pedido enviado!', 'Los voluntarios ya pueden ver tu solicitud.');
+      Toast.show({
+        type: 'success',
+        text1: 'Pedido Enviado',
+        text2: 'Tu solicitud fue enviada correctamente.',
+        position: 'bottom'
+      });
+
       setTitle('');
       setText('');
       setFile(null);
-      setIsPublic(false); // Reseteamos el switch
+      setIsPublic(false);
+      // Opcional: resetear la categoría a la primera de la lista
+      if (categories.length > 0) setSelectedCategory(categories[0].id);
       
       navigation.navigate('Audios');
 
     } catch (error) {
       console.error('Error al enviar:', error);
-      Alert.alert('Error', 'No se pudo enviar el pedido.');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'No se pudo enviar el pedido.',
+        position: 'bottom'
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -113,7 +160,7 @@ export default function ReaderDashboard({ navigation }: any) {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         
         <View style={styles.header}>
           <View style={styles.headerBrand}>
@@ -129,6 +176,23 @@ export default function ReaderDashboard({ navigation }: any) {
           <TextInput style={styles.input} placeholder="Ej: Resumen de historia..." placeholderTextColor={Theme.colors.textMuted} value={title} onChangeText={setTitle} />
         </View>
 
+        {/* 🌟 Nuevo componente Picker para la Categoría */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Categoría</Text>
+          <View style={styles.pickerContainer}>
+            <Picker
+              selectedValue={selectedCategory}
+              onValueChange={(itemValue) => setSelectedCategory(itemValue)}
+              style={{ color: Theme.colors.text }}
+              dropdownIconColor={Theme.colors.text}
+            >
+              {categories.map((cat) => (
+                <Picker.Item key={cat.id} label={cat.name} value={cat.id} />
+              ))}
+            </Picker>
+          </View>
+        </View>
+
         <View style={styles.inputGroup}>
           <Text style={styles.inputLabel}>Texto a leer (Opcional si adjuntás archivo)</Text>
           <TextInput style={[styles.input, styles.textArea]} placeholder="Escribí o pegá acá el texto completo..." placeholderTextColor={Theme.colors.textMuted} value={text} onChangeText={setText} multiline numberOfLines={6} textAlignVertical="top" />
@@ -138,7 +202,6 @@ export default function ReaderDashboard({ navigation }: any) {
           <Text style={styles.fileButtonText}>{file ? `📎 Archivo: ${file.name}` : '📄 Adjuntar PDF o Imagen (Opcional)'}</Text>
         </TouchableOpacity>
 
-        {/* 🆕 Interruptor de Privacidad */}
         <View style={styles.switchContainer}>
           <View style={styles.switchTextContainer}>
             <Text style={styles.switchLabel}>Compartir en el Catálogo Público</Text>
@@ -178,16 +241,17 @@ const styles = StyleSheet.create({
   inputGroup: { marginBottom: 20 },
   inputLabel: { fontSize: Theme.text.fontSizeBody, fontWeight: 'bold', color: Theme.colors.text, marginBottom: 8, marginLeft: 4 },
   input: { backgroundColor: Theme.colors.backgroundCard, padding: 18, borderRadius: Theme.spacing.borderRadiusCard, fontSize: Theme.text.fontSizeTitle, color: Theme.colors.text, borderWidth: 1, borderColor: Theme.colors.border },
+  
+  // 🌟 Nuevo estilo para contener el Picker prolijamente
+  pickerContainer: { backgroundColor: Theme.colors.backgroundCard, borderRadius: Theme.spacing.borderRadiusCard, borderWidth: 1, borderColor: Theme.colors.border, justifyContent: 'center' },
+  
   textArea: { minHeight: 150 },
   fileButton: { backgroundColor: Theme.colors.backgroundCard, padding: 18, borderRadius: Theme.spacing.borderRadiusCard, marginBottom: 24, borderWidth: 2, borderColor: Theme.colors.accent, borderStyle: 'dashed', alignItems: 'center' },
   fileButtonText: { color: Theme.colors.accent, fontSize: Theme.text.fontSizeBody, fontWeight: 'bold', textAlign: 'center' },
-  
-  // 🆕 Estilos del Switch
   switchContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: Theme.colors.backgroundCard, padding: 16, borderRadius: Theme.spacing.borderRadiusCard, marginBottom: 24, borderWidth: 1, borderColor: Theme.colors.border },
   switchTextContainer: { flex: 1, paddingRight: 10 },
   switchLabel: { fontSize: 16, fontWeight: 'bold', color: Theme.colors.text },
   switchHelper: { fontSize: 12, color: Theme.colors.textMuted, marginTop: 4 },
-
   submitButton: { backgroundColor: Theme.colors.buttonPrimary, paddingVertical: 20, borderRadius: Theme.spacing.borderRadius, alignItems: 'center', elevation: 2 },
   buttonDisabled: { backgroundColor: Theme.colors.textMuted, elevation: 0 },
   submitButtonText: { color: Theme.colors.buttonPrimaryText, fontSize: 20, fontWeight: 'bold' },

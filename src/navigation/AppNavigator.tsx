@@ -11,6 +11,8 @@ import RegisterScreen from '../features/auth/RegisterScreen';
 import VolunteerTabs from './VolunteerTabs';
 import VolunteerDashboard from '../features/volunteer/VolunteerDashboard';
 import ReaderTabs from './ReaderTabs'; 
+import AdminTabs from './AdminTabs';
+import DonationComponent from '../features/donations/DonationComponent';
 
 const Stack = createNativeStackNavigator();
 
@@ -29,15 +31,22 @@ export default function AppNavigator() {
     <Stack.Navigator>
       {!user ? (
         <>
+          <Stack.Screen name="Login" component={LoginScreen} options={{ title: 'Iniciar Sesión', headerShown: false }} />
           <Stack.Screen name="RoleSelection" component={RoleSelectionScreen} options={{ headerShown: false }} />
           <Stack.Screen name="Register" component={RegisterScreen} options={{ title: 'Registro', headerShown: false }} />
-          <Stack.Screen name="Login" component={LoginScreen} options={{ title: 'Iniciar Sesión', headerShown: false }} />
         </>
       ) : (
-        user.role === 'oyente' ? (
+          user.role === 'admin' ? (
+            <>
+              <Stack.Screen name="AdminHome" component={AdminTabs} options={{ headerShown: false }} />
+              <Stack.Screen name="Donation" component={DonationComponent} options={{ title: 'Donaciones', headerBackTitle: 'Volver', headerShown: true }} />
+            </>
+          ) : 
+          user.role === 'oyente' ? (
           <>
             {/* El Oyente ahora entra directo a sus pestañas */}
             <Stack.Screen name="ReaderHome" component={ReaderTabs} options={{ headerShown: false }} />
+            <Stack.Screen name="Donation" component={DonationComponent} options={{ title: 'Donaciones', headerBackTitle: 'Volver', headerShown: true }} />
           </>
         ) : (
           <>
@@ -45,6 +54,7 @@ export default function AppNavigator() {
             <Stack.Screen name="VolunteerHome" component={VolunteerTabs} options={{ headerShown: false }} />
             {/* La grabadora se abre por encima */}
             <Stack.Screen name="VolunteerDashboard" component={VolunteerDashboard} options={{ title: 'Grabar Audio', headerBackTitle: 'Volver' }} />
+            <Stack.Screen name="Donation" component={DonationComponent} options={{ title: 'Donaciones', headerBackTitle: 'Volver', headerShown: true }} />
           </>
         )
       )}

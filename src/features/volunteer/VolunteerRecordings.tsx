@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Image, ScrollView } from 'react-native';
-import api from '../../services/api';
+import api, { SERVER_URL } from '../../services/api';
 import { Theme } from '../../styles/theme';
 import AudioPlayer from '../utils/AudioPlayer'; // Usamos el reproductor modular
 import { Ionicons } from '@expo/vector-icons';
 
 const logoMedalla = require('../../../assets/favicon.png');
-const SERVER_URL = 'http://20.88.17.113'; 
 
 interface Recording {
   id: number;
@@ -23,7 +22,7 @@ interface Recording {
 export default function VolunteerRecordings() {
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [playingId, setPlayingId] = useState<number | null>(null);
+  const [playingId, setPlayingId] = useState<string | null>(null);
 
   const fetchRecordings = async () => {
     try {
@@ -85,9 +84,9 @@ export default function VolunteerRecordings() {
         {!isValidating ? (
           <AudioPlayer 
             audioUrl={`${SERVER_URL}/storage/${item.audio_path}`} 
-            id={item.id} 
+            id={item.id.toString()} 
             activeId={playingId} 
-            onPlay={setPlayingId} 
+            onPlay={(id) => setPlayingId(String(id))} 
           />
         ) : (
           <View style={styles.validatingContainer}>

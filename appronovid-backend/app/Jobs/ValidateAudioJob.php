@@ -44,17 +44,32 @@ class ValidateAudioJob implements ShouldQueue
         }
 
         try {
-            $response = Http::timeout(200)
-                ->withoutVerifying()
-                ->withToken('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')
-                ->withHeaders(['Content-Type' => 'audio/m4a'])
-                ->withBody(file_get_contents($audioPathAbsoluto), 'audio/m4a')
-                ->post('https://router.huggingface.co/hf-inference/models/openai/whisper-large-v3');
+            $groqKey = env('GROQ_API_KEY');
+            if (!$groqKey) {
+                Log::error("Falta GROQ_API_KEY en el archivo .env");
+                return;
+            }
 
-            $resultadoAI = $response->json();
-            $textoTranscrito = $resultadoAI['text'] ?? '';
+            // 1. Creamos el cliente web que ignora el error de certificado SSL en Windows
+            $guzzleClient = new \GuzzleHttp\Client(['verify' => false]);
 
-            if ($response->successful()) {
+            // 2. Iniciamos el SDK de OpenAI, pero lo engañamos para que use los servidores gratuitos de Groq
+            $client = \OpenAI::factory()
+                ->withApiKey($groqKey)
+                ->withBaseUri('https://api.groq.com/openai/v1')
+                ->withHttpClient($guzzleClient)
+                ->make();
+
+            // 3. Enviamos el archivo de audio directamente al modelo Whisper de Groq
+            $response = $client->audio()->transcribe([
+                'model' => 'whisper-large-v3',
+                'file' => fopen($audioPathAbsoluto, 'r'), // fopen lee el archivo pesado de a pedacitos
+            ]);
+
+            // Extraemos el texto de la respuesta
+            $textoTranscrito = $response->text ?? '';
+
+            if (!empty($textoTranscrito)) {
 
                 $recording->ai_transcription = $textoTranscrito;
                 $recording->save();
@@ -89,18 +104,28 @@ class ValidateAudioJob implements ShouldQueue
                     $this->sendPush($recording->volunteer_id, 'Audio rechazado por calidad ❌', "Tu lectura de '{$readingRequest->title}' no coincide con el texto original. La IA no aprobó la transcripción.");
                 }
             } else {
-                // ❌ RECHAZADO POR FALLO DE API
+                // ❌ RECHAZADO POR FALLO (Vino vacío)
                 $recording->status = 'rejected';
-                $recording->ai_transcription = "Error técnico al procesar el audio en el servidor.";
+                $recording->ai_transcription = "La IA no pudo entender el audio.";
                 $recording->save();
 
                 $readingRequest->status = 'pending';
                 $readingRequest->save();
 
-                $this->sendPush($recording->volunteer_id, 'Audio rechazado ❌', "Tu lectura de '{$readingRequest->title}' no se pudo validar debido a un error técnico. Por favor, intenta grabar nuevamente.");
+                $this->sendPush($recording->volunteer_id, 'Audio rechazado ❌', "No pudimos validar tu lectura. Por favor, intenta grabar nuevamente en un lugar con menos ruido.");
             }
         } catch (\Exception $e) {
             Log::error("Error en Job de IA: " . $e->getMessage());
+
+            // ❌ RECHAZADO POR ERROR TÉCNICO (El "catch" definitivo)
+            $recording->status = 'rejected';
+            $recording->ai_transcription = "Error técnico al procesar el audio en el servidor.";
+            $recording->save();
+
+            $readingRequest->status = 'pending';
+            $readingRequest->save();
+
+            $this->sendPush($recording->volunteer_id, 'Audio rechazado ❌', "Tu lectura de '{$readingRequest->title}' no se pudo validar debido a un error técnico. Por favor, intenta grabar nuevamente.");
         }
     }
 

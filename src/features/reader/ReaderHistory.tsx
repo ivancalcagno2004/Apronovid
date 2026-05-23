@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, KeyboardAvoidingView, Platform, Image, Switch } from 'react-native';
-import api from '../../services/api';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, KeyboardAvoidingView, Platform, Image, Switch, ScrollView } from 'react-native';
+import api, { SERVER_URL } from '../../services/api';
 import { Theme } from '../../styles/theme';
-
+import Toast from 'react-native-toast-message';
 import AudioPlayer from '../utils/AudioPlayer';
 
 const logoMedalla = require('../../../assets/favicon.png');
-const SERVER_URL = 'http://20.88.17.113'; 
 
 interface ReadingRequest {
   id: number;
@@ -20,7 +19,7 @@ interface ReadingRequest {
 export default function ReaderHistory({ navigation }: any) {
   const [requests, setRequests] = useState<ReadingRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [playingId, setPlayingId] = useState<number | null>(null);
+  const [playingId, setPlayingId] = useState<string | null>(null);
 
   const [isEditModalVisible, setEditModalVisible] = useState(false);
   const [editingRequest, setEditingRequest] = useState<ReadingRequest | null>(null);
@@ -52,10 +51,10 @@ export default function ReaderHistory({ navigation }: any) {
       { text: "Eliminar", style: "destructive", onPress: async () => {
           try {
             await api.delete(`/reading-requests/${id}`);
-            Alert.alert("Éxito", "Pedido eliminado.");
+            Toast.show({ type: 'success', text1: 'Éxito', text2: 'Pedido eliminado.', position: 'bottom', visibilityTime: 7000});
             fetchMyRequests(); 
           } catch (error: any) {
-            Alert.alert("Error", error.response?.data?.message || "No se pudo eliminar.");
+            Toast.show({ type: 'error', text1: 'Error al eliminar', text2: error.response?.data?.message || 'No se pudo eliminar.' });
           }
         }
       }
@@ -79,11 +78,10 @@ export default function ReaderHistory({ navigation }: any) {
         description_or_text: editText,
         is_public: editIsPublic
       });
-      Alert.alert("Éxito", "Pedido actualizado.");
       setEditModalVisible(false);
       fetchMyRequests();
     } catch (error: any) {
-      Alert.alert("Error", error.response?.data?.message || "No se pudo editar.");
+      Toast.show({ type: 'error', text1: 'Error al editar', text2: error.response?.data?.message || 'No se pudo editar.' });
     }
   };
 
@@ -115,9 +113,9 @@ export default function ReaderHistory({ navigation }: any) {
         {isCompleted ? (
           <AudioPlayer 
             audioUrl={`${SERVER_URL}/storage/${item.audio_path}`} 
-            id={item.id} 
+            id={item.id.toString()} 
             activeId={playingId} 
-            onPlay={setPlayingId} 
+            onPlay={(id) => setPlayingId(String(id))}
           />
         ) : (
           <View>
@@ -168,30 +166,37 @@ export default function ReaderHistory({ navigation }: any) {
 
       {/* Modal de edición */}
       <Modal visible={isEditModalVisible} animationType="slide" transparent={true}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Editar Pedido</Text>
-            <Text style={styles.label}>Título</Text>
-            <TextInput style={styles.input} value={editTitle} onChangeText={setEditTitle} />
-            <Text style={styles.label}>Texto a leer</Text>
-            <TextInput style={[styles.input, styles.textArea]} value={editText} onChangeText={setEditText} multiline numberOfLines={4} />
-            
-            {/* 🆕 Switch de privacidad en el modal de edición */}
-            <View style={styles.modalSwitchContainer}>
-              <Text style={styles.label}>Compartir en el Catálogo Público</Text>
-              <Switch
-                trackColor={{ false: Theme.colors.border, true: Theme.colors.success }}
-                thumbColor="#FFF"
-                onValueChange={setEditIsPublic}
-                value={editIsPublic}
-              />
-            </View>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+          style={styles.modalOverlay}
+        >
+          {/* 🌟 Envolvemos en un ScrollView para que se pueda deslizar si el teclado tapa la pantalla */}
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Editar Pedido</Text>
+              
+              <Text style={styles.label}>Título</Text>
+              <TextInput style={styles.input} value={editTitle} onChangeText={setEditTitle} />
+              
+              <Text style={styles.label}>Texto a leer</Text>
+              <TextInput style={[styles.input, styles.textArea]} value={editText} onChangeText={setEditText} multiline numberOfLines={4} />
+              
+              <View style={styles.modalSwitchContainer}>
+                <Text style={styles.label}>Compartir en el Catálogo Público</Text>
+                <Switch
+                  trackColor={{ false: Theme.colors.border, true: Theme.colors.success }}
+                  thumbColor="#FFF"
+                  onValueChange={setEditIsPublic}
+                  value={editIsPublic}
+                />
+              </View>
 
-            <View style={styles.modalButtons}>
-              <TouchableOpacity onPress={() => setEditModalVisible(false)} style={styles.cancelModalBtn}><Text style={styles.cancelText}>Cancelar</Text></TouchableOpacity>
-              <TouchableOpacity onPress={saveEdit} style={styles.saveModalBtn}><Text style={styles.saveText}>Guardar</Text></TouchableOpacity>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity onPress={() => setEditModalVisible(false)} style={styles.cancelModalBtn}><Text style={styles.cancelText}>Cancelar</Text></TouchableOpacity>
+                <TouchableOpacity onPress={saveEdit} style={styles.saveModalBtn}><Text style={styles.saveText}>Guardar</Text></TouchableOpacity>
+              </View>
             </View>
-          </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
     </View>

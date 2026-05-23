@@ -3,10 +3,8 @@ import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, Linking } 
 import { Audio } from 'expo-av';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
-import api from '../../services/api';
+import api, { SERVER_URL } from '../../services/api';
 import { Theme } from '../../styles/theme';
-
-const SERVER_URL = 'http://20.88.17.113'; 
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -27,6 +25,9 @@ export default function VolunteerDashboard({ navigation, route }: any) {
   const [audioUri, setAudioUri] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [metering, setMetering] = useState(-160);
+  const [playbackSound, setPlaybackSound] = useState<Audio.Sound | null>(null);
+  const [isPlayingPreview, setIsPlayingPreview] = useState(false);
+  const [previewDuration, setPreviewDuration] = useState(0); // Para mostrar cuánto dura
 
   useEffect(() => {
     registerForPushNotificationsAsync();
@@ -76,20 +77,23 @@ export default function VolunteerDashboard({ navigation, route }: any) {
         return;
       }
       
-      // Pedimos el token mágico de Expo
-      token = (await Notifications.getExpoPushTokenAsync({
-        projectId: 'a96ae1b8-859f-4e54-b5dd-bc5b43f487cf'
-      })).data;
-      
-      // Se lo mandamos a Laravel
+      // 🌟 ✅ Lo envolvemos TODO en un gran try/catch
       try {
-        await api.post('/user/push-token', { token });
-        console.log('Token enviado al servidor:', token);
+          const tokenData = await Notifications.getExpoPushTokenAsync({
+            projectId: 'a96ae1b8-859f-4e54-b5dd-bc5b43f487cf' // Mantené tu ID de proyecto acá
+          });
+          
+          token = tokenData.data;
+          
+          // Si conseguimos el token, lo mandamos a Laravel
+          await api.post('/user/push-token', { token: token }); 
+          console.log('Token guardado exitosamente:', token);
+
       } catch (error) {
-        console.error('Error enviando el token:', error);
+          // Si Google Play Services falla, atrapamos el error silenciosamente
+          // y dejamos que la app siga funcionando sin notificaciones.
+          console.log('No se pudo obtener el token Push (Posible emulador sin Google APIs).', error);
       }
-    } else {
-      console.log('Las Push Notifications necesitan un dispositivo físico, no funcionan en el simulador web.');
     }
   }
 
@@ -135,8 +139,44 @@ export default function VolunteerDashboard({ navigation, route }: any) {
     } catch (error) { console.error(error); }
   };
 
-  // Descartar audio ya terminado
+  // 🌟 NUEVO: Funciones para escuchar el audio antes de enviarlo
+  const playPreview = async () => {
+    if (!audioUri) return;
+    try {
+      if (playbackSound) {
+        await playbackSound.stopAsync();
+        await playbackSound.unloadAsync();
+      }
+      
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: audioUri },
+        { shouldPlay: true },
+        (status) => {
+          if (status.isLoaded) {
+            setPreviewDuration(status.durationMillis || 0);
+            setIsPlayingPreview(status.isPlaying);
+            if (status.didJustFinish) {
+              setIsPlayingPreview(false);
+            }
+          }
+        }
+      );
+      setPlaybackSound(sound);
+    } catch (error) {
+      console.error('Error al reproducir la previa:', error);
+    }
+  };
+
+  const stopPreview = async () => {
+    if (playbackSound) {
+      await playbackSound.stopAsync();
+      setIsPlayingPreview(false);
+    }
+  };
+
+  // 🌟 IMPORTANTE: Limpiamos el sonido si el voluntario decide descartar el audio
   const discardAudio = () => {
+    stopPreview(); // Frenamos por si estaba sonando
     setAudioUri(null);
   };
 
@@ -257,6 +297,26 @@ export default function VolunteerDashboard({ navigation, route }: any) {
         {audioUri && !isRecording && (
           <View style={styles.resultContainer}>
             <Text style={styles.successText}>✅ Audio listo para enviar</Text>
+            
+            {/* 🌟 NUEVO: Botón para escuchar la muestra */}
+            <View style={styles.previewContainer}>
+              <TouchableOpacity 
+                style={[styles.previewButton, isPlayingPreview && styles.previewButtonActive]} 
+                onPress={isPlayingPreview ? stopPreview : playPreview}
+              >
+                <Text style={styles.previewButtonText}>
+                  {isPlayingPreview ? '⏹️ Detener Muestra' : '🎧 Escuchar Grabación'}
+                </Text>
+              </TouchableOpacity>
+              
+              {/* Mostramos los segundos si ya lo cargó */}
+              {previewDuration > 0 && !isPlayingPreview && (
+                 <Text style={styles.previewDurationText}>
+                    Duración: {Math.floor(previewDuration / 1000)}s
+                 </Text>
+              )}
+            </View>
+
             <TouchableOpacity style={[styles.button, styles.submitButton, isUploading && { opacity: 0.7 }]} onPress={uploadAudio} disabled={isUploading}>
               <Text style={styles.submitButtonText}>{isUploading ? 'Subiendo...' : 'Subir al Muro'}</Text>
             </TouchableOpacity>
@@ -312,5 +372,11 @@ const styles = StyleSheet.create({
   resultContainer: { width: '100%', alignItems: 'center', padding: 20, backgroundColor: Theme.colors.backgroundCard, borderRadius: Theme.spacing.borderRadiusCard, borderWidth: 1, borderColor: Theme.colors.success },
   successText: { fontSize: Theme.text.fontSizeBody, fontWeight: 'bold', color: Theme.colors.success, marginBottom: 16 },
   discardButton: { marginTop: 16 },
-  discardButtonText: { color: Theme.colors.danger, fontWeight: 'bold' }
+  discardButtonText: { color: Theme.colors.danger, fontWeight: 'bold' },
+  // Estilos de la Previsualización
+  previewContainer: { width: '100%', alignItems: 'center', marginBottom: 20 },
+  previewButton: { backgroundColor: '#E0E7FF', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 25, borderWidth: 1, borderColor: '#4F46E5' },
+  previewButtonActive: { backgroundColor: '#FECACA', borderColor: Theme.colors.danger },
+  previewButtonText: { color: '#4F46E5', fontWeight: 'bold', fontSize: 16 },
+  previewDurationText: { marginTop: 6, color: Theme.colors.textMuted, fontSize: 12 },
 });
