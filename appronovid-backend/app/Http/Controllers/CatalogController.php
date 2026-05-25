@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Audiobook;
 use App\Models\ReadingRequest;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB; // 🌟 IMPORTANTE: Agregamos la fachada DB
 
 class CatalogController extends Controller
 {
@@ -13,7 +14,18 @@ class CatalogController extends Controller
         $search = $request->query('search');
         $categoryId = $request->query('category_id');
 
-        // 1. Buscar en el Catálogo Histórico (Audiobooks)
+        // 🌟 1. Obtenemos los favoritos del usuario actual (si está logueado)
+        $userId = $request->user()?->id;
+        $userFavorites = [];
+
+        if ($userId) {
+            $userFavorites = DB::table('favorites')
+                ->where('user_id', $userId)
+                ->pluck('catalog_id')
+                ->toArray();
+        }
+
+        // 2. Buscar en el Catálogo Histórico (Audiobooks)
         $audiobooksQuery = Audiobook::with('category');
 
         if ($categoryId && $categoryId !== 'all') {
@@ -41,7 +53,7 @@ class CatalogController extends Controller
             ];
         });
 
-        // 2. Buscar en Pedidos Públicos de la Comunidad (ReadingRequests)
+        // 3. Buscar en Pedidos Públicos de la Comunidad (ReadingRequests)
         $requestsQuery = ReadingRequest::with('category')
             ->where('is_public', true)
             ->where('status', 'completed')
@@ -67,10 +79,15 @@ class CatalogController extends Controller
             ];
         });
 
-        // 3. Fusionar las dos listas, ordenar por los más recientes y reindexar
+        // 4. Fusionar, ordenar y 🌟 AGREGAR EL ESTADO DE FAVORITOS 🌟
         $catalog = $audiobooks->concat($publicRequests)
             ->sortByDesc('created_at')
-            ->values();
+            ->values()
+            ->map(function ($item) use ($userFavorites) {
+                // Chequeamos si el ID (ej: 'hist_13') está en la lista de favoritos del usuario
+                $item['is_favorite'] = in_array($item['id'], $userFavorites);
+                return $item;
+            });
 
         return response()->json($catalog);
     }

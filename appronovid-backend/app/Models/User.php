@@ -45,4 +45,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(TaskQueue::class, 'narrador_id');
     }
+
+    public function favorites()
+    {
+        return $this->belongsToMany(ReadingRequest::class, 'favorites', 'user_id', 'reading_request_id')->withTimestamps();
+    }
 }

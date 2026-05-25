@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TextInput, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Image, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api, { SERVER_URL } from '../../services/api';
 import { Theme } from '../../styles/theme';
 import AudioPlayer from '../utils/AudioPlayer';
 import Toast from 'react-native-toast-message';
+import { useFocusEffect } from '@react-navigation/native';
 
 // 🌟 IMPORTANTE: Importá tu contexto de autenticación acá para obtener el rol. 
 // (Ajustá la ruta según la estructura de tus carpetas)
@@ -20,6 +21,7 @@ interface CatalogItem {
   author?: string; 
   reader?: string; 
   category_name?: string;
+  is_favorite?: boolean;
 }
 
 interface Category {
@@ -51,6 +53,14 @@ export default function CatalogScreen() {
     fetchCategories();
   }, []);
 
+  useFocusEffect(
+  useCallback(() => {
+    const delayDebounceFn = setTimeout(() => {
+      fetchCatalog(search, selectedCategory);
+    }, 500);
+    return () => clearTimeout(delayDebounceFn);
+  }, [search, selectedCategory]));
+
   const fetchCatalog = async (searchQuery = '', categoryId: number | string = 'all') => {
     try {
       setIsLoading(true);
@@ -68,12 +78,41 @@ export default function CatalogScreen() {
     }
   };
 
-  useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
-      fetchCatalog(search, selectedCategory);
-    }, 500);
-    return () => clearTimeout(delayDebounceFn);
-  }, [search, selectedCategory]);
+  const toggleFavorite = async (item: CatalogItem) => {
+    // 1. Actualización Optimista: Cambiamos el icono INSTANTÁNEAMENTE en la pantalla
+    setItems((currentItems) => 
+      currentItems.map((currentItem) => 
+        currentItem.id === item.id 
+          ? { ...currentItem, is_favorite: !currentItem.is_favorite } 
+          : currentItem
+      )
+    );
+
+    try {
+        // 2. Le avisamos a Laravel por atrás que cambie el estado en la base de datos
+        await api.post(`/favorites/${item.id}/toggle`);
+        
+        Toast.show({ 
+            type: 'success', 
+            text1: 'Favoritos actualizados', 
+            position: 'bottom', 
+            text2: item.is_favorite ? 'El audio fue removido de tus favoritos.' : 'El audio fue agregado a tus favoritos.' 
+        });
+        
+        fetchCatalog();
+        
+    } catch (error) {
+        console.error(error);
+        setItems((currentItems) => 
+          currentItems.map((currentItem) => 
+            currentItem.id === item.id 
+              ? { ...currentItem, is_favorite: item.is_favorite } 
+              : currentItem
+          )
+        );
+        Toast.show({ type: 'error', text1: 'Error', text2: 'No se pudo actualizar el favorito', position: 'bottom' });
+    }
+  };
 
   // 🌟 NUEVO: Función de borrado inteligente y blindada
   const handleDelete = (item: CatalogItem) => {
@@ -139,6 +178,17 @@ export default function CatalogScreen() {
             <TouchableOpacity onPress={() => handleDelete(item)} style={styles.deleteButton}>
                 <Ionicons name="trash-outline" size={22} color={Theme.colors.danger} />
             </TouchableOpacity>
+        )}
+
+        {/* 🌟 NUEVO: Botón de Favorito */}
+        {user?.role === 'oyente' && (
+          <TouchableOpacity onPress={() => toggleFavorite(item)} style={styles.favoriteButton}>
+              <Ionicons 
+                  name={item.is_favorite ? "heart" : "heart-outline"} 
+                  size={22} 
+                  color={item.is_favorite ? Theme.colors.danger : Theme.colors.textMuted} 
+              />
+          </TouchableOpacity>
         )}
       </View>
       
@@ -257,5 +307,6 @@ const styles = StyleSheet.create({
   cardDate: { fontSize: 12, color: Theme.colors.textMuted, marginBottom: 10 },
   playerContainer: { marginTop: 10 },
   emptyState: { alignItems: 'center', justifyContent: 'center', marginTop: 60, paddingHorizontal: 30 },
-  emptyText: { fontSize: 16, color: Theme.colors.textMuted, textAlign: 'center', marginTop: 15 }
+  emptyText: { fontSize: 16, color: Theme.colors.textMuted, textAlign: 'center', marginTop: 15 },
+  favoriteButton: { padding: 8, marginLeft: 10, backgroundColor: '#FFEDED', borderRadius: 8 },
 });

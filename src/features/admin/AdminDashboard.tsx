@@ -148,12 +148,12 @@ export default function AdminDashboard() {
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                             <ActivityIndicator color={Theme.colors.buttonPrimaryText} />
                             <Text style={styles.buttonSubmitText}>Subiendo... {uploadProgress}%</Text> 
-                            {uploadProgress === 100 && <Text style={{ marginLeft: 10, color: Theme.colors.success }}>Procesando audio...</Text>}
                         </View>
                     ) : (
                         <Text style={styles.buttonSubmitText}>Subir al Catálogo Público</Text>
                     )}
                 </TouchableOpacity>
+                {uploadProgress === 100 && <Text style={styles.helperText}>Procesando audio...</Text>}
             </View>
         </ScrollView>
     );

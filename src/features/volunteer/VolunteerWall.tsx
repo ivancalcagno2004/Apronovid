@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Image } from 'react-native';
 import api from '../../services/api';
 import { Theme } from '../../styles/theme'; 
+import { useFocusEffect } from '@react-navigation/native';
 
 // Importamos el logo oficial 
 const logoMedalla = require('../../../assets/favicon.png');
@@ -31,9 +32,11 @@ export default function VolunteerWall({ navigation }: any) {
     }
   };
 
-  useEffect(() => {
-    fetchRequests();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchRequests();
+    }, [])
+  );
 
   const renderItem = ({ item }: { item: ReadingRequest }) => (
     <View style={styles.card} accessible={true}>
@@ -66,11 +69,8 @@ export default function VolunteerWall({ navigation }: any) {
       <View style={styles.header}>
         <View style={styles.headerBrand}>
           <Image source={logoMedalla} style={styles.headerLogo} />
-          <Text style={styles.title} accessibilityRole="header">Muro de Pedidos</Text>
+          <Text style={styles.title} accessibilityRole="header">Pedidos</Text>
         </View>
-        <TouchableOpacity onPress={fetchRequests} style={styles.refreshButton}>
-          <Text style={styles.refreshText}>🔄</Text>
-        </TouchableOpacity>
       </View>
 
       {isLoading ? (

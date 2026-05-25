@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, KeyboardAvoidingView, Platform, Image, Switch, ScrollView } from 'react-native';
 import api, { SERVER_URL } from '../../services/api';
 import { Theme } from '../../styles/theme';
 import Toast from 'react-native-toast-message';
 import AudioPlayer from '../utils/AudioPlayer';
+import { useFocusEffect } from '@react-navigation/native';
 
 const logoMedalla = require('../../../assets/favicon.png');
 
@@ -29,9 +30,13 @@ export default function ReaderHistory({ navigation }: any) {
   // 🆕 Estado para el switch en el modal de edición
   const [editIsPublic, setEditIsPublic] = useState(false);
 
-  useEffect(() => {
-    fetchMyRequests();
-  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchMyRequests();
+      
+    }, [])
+  );
 
   const fetchMyRequests = async () => {
     try {
@@ -143,9 +148,6 @@ export default function ReaderHistory({ navigation }: any) {
           <Image source={logoMedalla} style={styles.headerLogo} />
           <Text style={styles.title}>Mis Audios</Text>
         </View>
-        <TouchableOpacity onPress={fetchMyRequests} style={styles.refreshButton}>
-          <Text style={styles.refreshText}>🔄</Text>
-        </TouchableOpacity>
       </View>
       
       {isLoading ? (

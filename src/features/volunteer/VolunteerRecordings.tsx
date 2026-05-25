@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Image, ScrollView } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList,  ActivityIndicator, Alert, Image } from 'react-native';
 import api, { SERVER_URL } from '../../services/api';
 import { Theme } from '../../styles/theme';
 import AudioPlayer from '../utils/AudioPlayer'; // Usamos el reproductor modular
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 
 const logoMedalla = require('../../../assets/favicon.png');
 
@@ -36,9 +37,13 @@ export default function VolunteerRecordings() {
     }
   };
 
-  useEffect(() => {
-    fetchRecordings();
-  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchRecordings();
+    }, [])
+  );
+
 
   const translateStatus = (status: string) => {
     switch (status) {
@@ -105,9 +110,6 @@ export default function VolunteerRecordings() {
           <Image source={logoMedalla} style={styles.headerLogo} />
           <Text style={styles.title}>Mis Grabaciones</Text>
         </View>
-        <TouchableOpacity onPress={fetchRecordings} style={styles.refreshButton}>
-          <Text style={styles.refreshText}>🔄</Text>
-        </TouchableOpacity>
       </View>
 
       {isLoading ? (

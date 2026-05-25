@@ -6,7 +6,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ReadingRequestController;
 use App\Http\Controllers\VolunteerRecordingController;
 use App\Http\Controllers\CategoryController;
-use App\Http\Controllers\Admin\CatalogController;
+use App\Http\Controllers\FavoriteController;
 use Illuminate\Support\Facades\Log;
 
 // Rutas Públicas
@@ -43,6 +43,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/reading-requests/{id}/audio', [ReadingRequestController::class, 'uploadAudio']);
     Route::get('/my-recordings', [VolunteerRecordingController::class, 'index']);
     Route::get('/categories', [CategoryController::class, 'index']);
+    Route::get('/favorites', [FavoriteController::class, 'index']);
+    Route::post('/favorites/{id}/toggle', [FavoriteController::class, 'toggle']);
 
     // --- CERRAR SESIÓN ---
     Route::post('/logout', [AuthController::class, 'logout']);
