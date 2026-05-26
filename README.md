@@ -22,9 +22,9 @@ Una plataforma móvil inclusiva diseñada específicamente para **personas con d
 
 ## 📸 Vista Previa (Screenshots)
 
-| Catálogo de Audios | Pedido de Lectura (Perfil No Vidente) | Reproductor Accesible |
+| Catálogo de Audios | Pedido de Lectura (Perfil No Vidente) | Reproductor Accesible (Perfil Narrador) |
 | :---: | :---: | :---: |
-| ![Catálogo](https://i.postimg.cc/QCLgJvkZ/Captura-de-pantalla-2026-05-26-124929.png) | ![Pedir Lectura](https://i.postimg.cc/1tLxcRjz/Captura-de-pantalla-2026-05-26-125958.png) | ![Player](https://via.placeholder.com/200x400?text=Reproductor) |
+| ![Catálogo](https://i.postimg.cc/QCLgJvkZ/Captura-de-pantalla-2026-05-26-124929.png) | ![Pedir Lectura](https://i.postimg.cc/1tLxcRjz/Captura-de-pantalla-2026-05-26-125958.png) | ![Reproductor](https://i.postimg.cc/WbhywYFB/Captura-de-pantalla-2026-05-26-152658.png) |
 
 ---
 
