@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Image } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import api, { SERVER_URL } from '../../services/api';
@@ -7,7 +7,9 @@ import { Theme } from '../../styles/theme';
 import AudioPlayer from '../utils/AudioPlayer';
 import Toast from 'react-native-toast-message';
 
-// 🌟 Reutilizamos la misma interfaz del catálogo
+// 🌟 Importamos el logo oficial
+const logoMedalla = require('../../../assets/favicon.png');
+
 interface CatalogItem {
   id: string;
   title: string;
@@ -16,7 +18,7 @@ interface CatalogItem {
   author?: string; 
   reader?: string; 
   category_name?: string;
-  is_favorite?: boolean; // Siempre será true en esta pantalla, pero lo mantenemos por consistencia
+  is_favorite?: boolean; 
 }
 
 export default function FavoritesScreen() {
@@ -28,7 +30,6 @@ export default function FavoritesScreen() {
         try {
             setIsLoading(true);
             const response = await api.get('/favorites');
-            // Como esta ruta solo trae favoritos, forzamos que todos tengan is_favorite = true
             const mappedFavorites = response.data.map((item: CatalogItem) => ({
                 ...item,
                 is_favorite: true 
@@ -47,7 +48,6 @@ export default function FavoritesScreen() {
         }, [])
     );
 
-    // 🌟 Permitimos sacar el favorito desde acá mismo
     const toggleFavorite = async (item: CatalogItem) => {
         try {
             await api.post(`/favorites/${item.id}/toggle`);
@@ -57,7 +57,7 @@ export default function FavoritesScreen() {
                 text2: 'El audio fue removido de tu lista.',
                 position: 'bottom'
             });
-            fetchFavorites(); // Refrescamos la lista para reflejar el cambio
+            fetchFavorites(); 
         } catch (error) {
             console.error(error);
         }
@@ -75,7 +75,6 @@ export default function FavoritesScreen() {
                     )}
                 </View>
 
-                {/* Botón de Favorito (Siempre activo en esta pantalla) */}
                 <TouchableOpacity 
                     onPress={() => toggleFavorite(item)} 
                     style={styles.favoriteButton}
@@ -107,8 +106,12 @@ export default function FavoritesScreen() {
 
     return (
         <View style={styles.container}>
+            {/* 🌟 Header modificado con Logo */}
             <View style={styles.header}>
-                <Text style={styles.title} accessibilityRole="header">Mis Favoritos</Text>
+                <View style={styles.headerBrand}>
+                    <Image source={logoMedalla} style={styles.headerLogo} />
+                    <Text style={styles.mainTitle} accessibilityRole="header">Mis Favoritos</Text>
+                </View>
                 <Text style={styles.headerSubtitle}>Tus audios guardados para escuchar cuando quieras.</Text>
             </View>
 
@@ -136,9 +139,14 @@ export default function FavoritesScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: Theme.colors.background, paddingTop: Theme.spacing.padding },
-    header: { marginBottom: 20, paddingHorizontal: Theme.spacing.padding },
-    title: { fontSize: Theme.text.fontSizeHeader, fontWeight: 'bold', color: Theme.colors.primary },
-    headerSubtitle: { fontSize: Theme.text.fontSizeBody, color: Theme.colors.textMuted, marginTop: 4 },
+    
+    // 🌟 Estilos del Header actualizados
+    header: { marginBottom: 20, paddingHorizontal: Theme.spacing.padding, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: Theme.colors.border },
+    headerBrand: { flexDirection: 'row', alignItems: 'center' },
+    headerLogo: { width: 36, height: 36, marginRight: 12 },
+    mainTitle: { fontSize: Theme.text.fontSizeHeader, fontWeight: 'bold', color: Theme.colors.primary },
+    headerSubtitle: { fontSize: Theme.text.fontSizeBody, color: Theme.colors.textMuted, marginTop: 5 },
+    
     listContent: { paddingBottom: 40, paddingHorizontal: Theme.spacing.padding },
     card: { backgroundColor: Theme.colors.backgroundCard, padding: 20, borderRadius: Theme.spacing.borderRadiusCard, marginBottom: 16, borderWidth: 1, borderColor: Theme.colors.border, elevation: 1 },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },

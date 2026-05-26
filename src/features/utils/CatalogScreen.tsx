@@ -182,7 +182,7 @@ export default function CatalogScreen() {
 
         {/* 🌟 NUEVO: Botón de Favorito */}
         {user?.role === 'oyente' && (
-          <TouchableOpacity onPress={() => toggleFavorite(item)} style={styles.favoriteButton}>
+          <TouchableOpacity onPress={() => toggleFavorite(item)} style={styles.favoriteButton} accessibilityLabel={item.is_favorite ? `Quitar ${item.title} de favoritos` : `Agregar ${item.title} a favoritos`} accessibilityRole="button">
               <Ionicons 
                   name={item.is_favorite ? "heart" : "heart-outline"} 
                   size={22} 
@@ -211,10 +211,11 @@ export default function CatalogScreen() {
 
   return (
     <View style={styles.container}>
+      {/* 🌟 Header modificado para coincidir con las demás pantallas */}
       <View style={styles.header}>
         <View style={styles.headerBrand}>
             <Image source={logoMedalla} style={styles.headerLogo} />
-            <Text style={styles.title}>Catálogo Público</Text>
+            <Text style={styles.mainTitle} accessibilityRole="header">Catálogo Público</Text>
         </View>   
         <Text style={styles.headerSubtitle}>Explorá audios históricos y pedidos comunitarios</Text>
       </View>
@@ -277,11 +278,14 @@ export default function CatalogScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Theme.colors.background, paddingTop: Theme.spacing.padding },
-  header: { flexDirection: 'column', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingHorizontal: Theme.spacing.padding },
+  
+  // 🌟 Estilos del Header actualizados unificados
+  header: { marginBottom: 20, paddingHorizontal: Theme.spacing.padding, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: Theme.colors.border },
   headerBrand: { flexDirection: 'row', alignItems: 'center' },
   headerLogo: { width: 36, height: 36, marginRight: 12 },
-  title: { fontSize: Theme.text.fontSizeHeader, fontWeight: 'bold', color: Theme.colors.primary },
-  headerSubtitle: { fontSize: Theme.text.fontSizeBody, color: Theme.colors.textMuted, marginTop: 4 },
+  mainTitle: { fontSize: Theme.text.fontSizeHeader, fontWeight: 'bold', color: Theme.colors.primary },
+  headerSubtitle: { fontSize: Theme.text.fontSizeBody, color: Theme.colors.textMuted, marginTop: 5 },
+  
   searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: Theme.colors.backgroundCard, borderRadius: Theme.spacing.borderRadius, paddingHorizontal: 15, paddingVertical: 12, marginHorizontal: Theme.spacing.padding, marginBottom: 15, borderWidth: 1, borderColor: Theme.colors.border },
   searchIcon: { marginRight: 10 },
   searchInput: { flex: 1, fontSize: 16, color: Theme.colors.text },

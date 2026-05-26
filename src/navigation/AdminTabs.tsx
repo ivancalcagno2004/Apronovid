@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AdminDashboard from '../features/admin/AdminDashboard'; 
 import ProfileScreen from '../features/profile/ProfileScreen';
 import CatalogScreen from '../features/utils/CatalogScreen';
+import AdminFeedBackScreen from '../features/admin/AdminFeedBackScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -21,6 +22,7 @@ export default function AdminTabs() {
           let iconName: keyof typeof Ionicons.glyphMap = 'help-circle';
           if (route.name === 'Gestión') iconName = focused ? 'settings' : 'settings-outline';
           else if (route.name === 'Catálogo') iconName = focused ? 'library' : 'library-outline';
+          else if (route.name === 'Reportes') iconName = focused ? 'warning' : 'warning-outline';
           else if (route.name === 'Perfil') iconName = focused ? 'person' : 'person-outline';
           return <Ionicons name={iconName} size={size + 4} color={color} />;
         },
@@ -40,6 +42,7 @@ export default function AdminTabs() {
     >
       <Tab.Screen name="Catálogo" component={CatalogScreen} options={{ title: 'Catálogo' }} />
       <Tab.Screen name="Gestión" component={AdminDashboard} options={{ title: 'Gestión Catálogo' }} />
+      <Tab.Screen name="Reportes" component={AdminFeedBackScreen} options={{ title: 'Reportes' }} />
       <Tab.Screen name="Perfil" component={ProfileScreen} />
     </Tab.Navigator>
   );

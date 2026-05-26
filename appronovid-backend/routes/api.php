@@ -7,6 +7,7 @@ use App\Http\Controllers\ReadingRequestController;
 use App\Http\Controllers\VolunteerRecordingController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\FavoriteController;
+use App\Http\Controllers\FeedbackController;
 use Illuminate\Support\Facades\Log;
 
 // Rutas Públicas
@@ -38,6 +39,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/reading-requests/{id}', [ReadingRequestController::class, 'update']);
     Route::delete('/reading-requests/{id}', [ReadingRequestController::class, 'destroy']);
     Route::get('/catalog', [\App\Http\Controllers\CatalogController::class, 'index']);
+    Route::post('/feedback', [FeedbackController::class, 'store']);
+    Route::get('/admin/feedback', [FeedbackController::class, 'index']);
+    Route::delete('/admin/feedback/{id}', [FeedbackController::class, 'destroy']);
 
     // --- AUDIOS Y GRABACIONES ---
     Route::post('/reading-requests/{id}/audio', [ReadingRequestController::class, 'uploadAudio']);

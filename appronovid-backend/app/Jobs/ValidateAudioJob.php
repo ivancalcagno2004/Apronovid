@@ -117,6 +117,10 @@ class ValidateAudioJob implements ShouldQueue
         } catch (\Exception $e) {
             Log::error("Error en Job de IA: " . $e->getMessage());
 
+            if ($e->getCode() === 429) {
+                $this->release(60); // Reintenta en 1 minuto
+                return;
+            }
             // ❌ RECHAZADO POR ERROR TÉCNICO (El "catch" definitivo)
             $recording->status = 'rejected';
             $recording->ai_transcription = "Error técnico al procesar el audio en el servidor.";

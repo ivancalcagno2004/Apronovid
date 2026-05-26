@@ -110,7 +110,7 @@ export default function AdminDashboard() {
                     <Image source={logoMedalla} style={styles.headerLogo} />
                     <Text style={styles.mainTitle} accessibilityRole="header">Panel de Control</Text>
                 </View>
-                <Text style={styles.subtitle}>Gestioná el contenido de la plataforma Apronovid</Text>
+                <Text style={styles.subtitle}>Gestioná el contenido de la plataforma</Text>
             </View>
 
             <View style={styles.sectionCard}>
@@ -140,7 +140,7 @@ export default function AdminDashboard() {
                 <TouchableOpacity onPress={pickAudio} style={[styles.button, isUploading && styles.buttonDisabled]} disabled={isUploading}>
                     <Text style={styles.buttonText}>{audioFile ? '🎧 Cambiar Audio' : '🎧 Seleccionar Archivo de Audio'}</Text>
                 </TouchableOpacity>
-                <Text style={styles.helperText}>Formatos permitidos: .mp3, .wav (Máximo 200MB)</Text>
+                <Text style={styles.helperText}>Formatos permitidos: .mp3, .wav (Máximo 500MB)</Text>
                 {audioFile && <Text style={styles.fileText}>Archivo listo: {audioFile.name}</Text>}
 
                 <TouchableOpacity onPress={handleUpload} style={[styles.buttonSubmit, isUploading && styles.buttonDisabled]} disabled={isUploading}>
