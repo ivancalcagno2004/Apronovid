@@ -194,7 +194,7 @@ export default function CatalogScreen() {
         )}
 
         {user?.role === 'oyente' && (
-          <TouchableOpacity onPress={() => toggleFavorite(item)} style={styles.favoriteButton} accessibilityRole="button">
+          <TouchableOpacity onPress={() => toggleFavorite(item)} style={styles.favoriteButton} accessibilityRole="button" accessibilityLabel={item.is_favorite ? `Remover ${item.title} de favoritos` : `Agregar ${item.title} a favoritos`}>
               <Ionicons name={item.is_favorite ? "heart" : "heart-outline"} size={22} color={item.is_favorite ? Theme.colors.danger : Theme.colors.textMuted} />
           </TouchableOpacity>
         )}
@@ -207,6 +207,7 @@ export default function CatalogScreen() {
           <TouchableOpacity 
             onPress={() => showVolunteerProfile(item.reader_id!)}
             accessible={true}
+            accessibilityLabel={`Presiona para ver el perfil de ${item.reader}`}
             accessibilityRole="button"
             style={{ marginBottom: 4 }}
           >
