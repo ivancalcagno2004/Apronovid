@@ -1,10 +1,11 @@
-import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import React, {useEffect} from 'react';
+import { NavigationContainer, useNavigationContainerRef} from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppNavigator from './src/navigation/AppNavigator';
 import { AuthProvider } from './src/context/AuthContext';
 import Toast from 'react-native-toast-message';
 import { View, Text, StyleSheet } from 'react-native';
+import * as Notifications from 'expo-notifications';
 
 const toastConfig = {
   // Diseño para los avisos informativos (como el de bienvenida de Google)
@@ -46,11 +47,51 @@ const toastConfig = {
   )
 };
 
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowList: true,
+  }),
+});
+
 export default function App() {
+  // 🌟 1. Creamos la referencia para manipular la navegación desde la raíz
+  const navigationRef = useNavigationContainerRef();
+
+  // 🌟 2. Agregamos el escuchador de toques en la notificación
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+      const data = response.notification.request.content.data;
+      
+      // Si la notificación trae la data de recomendación
+      if (data && data.type === 'recommendation' && data.audio_id) {
+        
+        // Usamos un setTimeout corto para darle tiempo al AuthContext de cargar 
+        // al usuario si la app estaba completamente cerrada
+        setTimeout(() => {
+          if (navigationRef.isReady()) {
+            // Saltamos primero al Tab del Oyente, y luego específicamente a la pantalla "Catálogo"
+            // Le pasamos el ID del audio como parámetro
+            (navigationRef as any).navigate('ReaderHome', {
+              screen: 'Catálogo',
+              params: { autoPlayId: String(data.audio_id) }
+            });
+          }
+        }, 1500);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   return (
     <AuthProvider>
       <SafeAreaProvider> 
-        <NavigationContainer>
+        <NavigationContainer ref={navigationRef}>
           <AppNavigator />
           <Toast config={toastConfig} />
         </NavigationContainer>
@@ -70,6 +111,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOpacity: 0.3,
     shadowRadius: 5,
+    marginBottom: 15,
   },
   toastTitle: {
     fontSize: 22, // Letra enorme

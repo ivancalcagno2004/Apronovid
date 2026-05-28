@@ -17,9 +17,13 @@ class VolunteerRecording extends Model
         'ai_transcription'
     ];
 
-    // 🆕 RELACIÓN: Cada grabación pertenece a una solicitud de lectura original
     public function readingRequest()
     {
         return $this->belongsTo(ReadingRequest::class, 'reading_request_id');
+    }
+
+    public function volunteer()
+    {
+        return $this->belongsTo(User::class, 'volunteer_id');
     }
 }

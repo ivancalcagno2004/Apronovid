@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, Image, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons'; // Importamos los íconos
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
@@ -11,7 +11,7 @@ import Toast from 'react-native-toast-message';
 const logoMedalla = require('../../../assets/splash_icon.png');
 
 // ID de cliente de Google
-const GOOGLE_CLIENT_ID = '33944635259-jl535l4cfntf17pq5pqdae952l8n3r8t.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID = '985023057997-rh5r30seb1kl783ou3vvaa14l96dutmn.apps.googleusercontent.com';
 
 GoogleSignin.configure({
   webClientId: GOOGLE_CLIENT_ID,
@@ -130,6 +130,8 @@ export default function LoginScreen({ navigation }: any) {
           position: 'bottom',
           visibilityTime: 7000
         });
+        Alert.alert("Error exacto", JSON.stringify(error));
+        console.log("Error de Google:", error);
       }
     } finally {
       setIsSubmitting(false);

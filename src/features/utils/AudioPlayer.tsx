@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-// 🌟 Add AccessibilityInfo import
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, AccessibilityInfo } from 'react-native';
 import { Audio } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,7 +17,6 @@ export default function AudioPlayer({ audioUrl, id, activeId, onPlay, accessibil
     const [sound, setSound] = useState<Audio.Sound | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    
     const [duration, setDuration] = useState(0);
     const [position, setPosition] = useState(0);
     const [isSeeking, setIsSeeking] = useState(false);
@@ -55,7 +53,7 @@ export default function AudioPlayer({ audioUrl, id, activeId, onPlay, accessibil
         if (sound) {
             try {
                 const status = await sound.getStatusAsync();
-                
+               
                 if (status.isLoaded) {
                     if (isPlaying) {
                         await sound.pauseAsync();
@@ -65,7 +63,7 @@ export default function AudioPlayer({ audioUrl, id, activeId, onPlay, accessibil
                         await sound.playAsync();
                         setIsPlaying(true);
                     }
-                    return; 
+                    return;
                 } else {
                     setSound(null);
                     setIsPlaying(false);
@@ -82,7 +80,7 @@ export default function AudioPlayer({ audioUrl, id, activeId, onPlay, accessibil
             const { sound: newSound } = await Audio.Sound.createAsync(
                 { uri: audioUrl },
                 { shouldPlay: true },
-                onPlaybackStatusUpdate 
+                onPlaybackStatusUpdate
             );
             setSound(newSound);
             setIsPlaying(true);
@@ -96,28 +94,28 @@ export default function AudioPlayer({ audioUrl, id, activeId, onPlay, accessibil
     const onPlaybackStatusUpdate = (status: any) => {
         if (status.isLoaded) {
             setDuration(status.durationMillis || 0);
-            
+           
             if (!isSeeking) {
                 setPosition(status.positionMillis || 0);
             }
-            
+           
             setIsPlaying(status.isPlaying);
-            
+           
             if (status.didJustFinish) {
                 setIsPlaying(false);
                 setPosition(0);
-                if (sound) sound.setPositionAsync(0); 
+                if (sound) sound.setPositionAsync(0);
             }
         }
     };
 
     const handleSlidingStart = () => {
-        setIsSeeking(true); 
+        setIsSeeking(true);
     };
 
     const handleValueChange = (value: number) => {
-        if (!isSeeking) setIsSeeking(true); 
-        setPosition(value); 
+        if (!isSeeking) setIsSeeking(true);
+        setPosition(value);
     };
 
     // This is still needed for standard physical dragging
@@ -126,7 +124,7 @@ export default function AudioPlayer({ audioUrl, id, activeId, onPlay, accessibil
             try {
                 const status = await sound.getStatusAsync();
                 if (status.isLoaded) {
-                    await sound.setPositionAsync(value); 
+                    await sound.setPositionAsync(value);
                 } else {
                     setSound(null);
                     setIsPlaying(false);
@@ -136,7 +134,7 @@ export default function AudioPlayer({ audioUrl, id, activeId, onPlay, accessibil
             }
         }
         setPosition(value);
-        setTimeout(() => setIsSeeking(false), 100); 
+        setTimeout(() => setIsSeeking(false), 100);
     };
 
     // 🌟 NUEVAS FUNCIONES Robustas Específicas para TalkBack
@@ -181,13 +179,13 @@ export default function AudioPlayer({ audioUrl, id, activeId, onPlay, accessibil
 
     return (
         <View style={styles.container}>
-            <TouchableOpacity 
-                onPress={handlePlayPause} 
+            <TouchableOpacity
+                onPress={handlePlayPause}
                 style={styles.playButton}
                 accessibilityRole="button"
                 accessibilityLabel={
-                    isPlaying 
-                        ? `Pausar ${accessibilityLabel ? accessibilityLabel.replace('Reproducir ', '') : 'audio'}` 
+                    isPlaying
+                        ? `Pausar ${accessibilityLabel ? accessibilityLabel.replace('Reproducir ', '') : 'audio'}`
                         : (accessibilityLabel || 'Reproducir audio')
                 }
             >
@@ -205,19 +203,19 @@ export default function AudioPlayer({ audioUrl, id, activeId, onPlay, accessibil
                     maximumValue={duration}
                     value={position}
                     // Step para arrastre manual físico (precisión)
-                    step={1000} 
+                    step={1000}
                     // Handlers para arrastre manual
                     onSlidingStart={handleSlidingStart}
-                    onValueChange={handleValueChange} 
+                    onValueChange={handleValueChange}
                     onSlidingComplete={handleSlidingComplete}
-                    
+                   
                     minimumTrackTintColor={Theme.colors.primary}
                     maximumTrackTintColor={Theme.colors.border}
                     thumbTintColor={Theme.colors.primary}
-                    disabled={!sound} 
-                    
+                    disabled={!sound}
+                   
                     // 🌟 CONFIGURACIÓN ACCESIBILIDAD AVANZADA
-                    accessibilityRole="adjustable" 
+                    accessibilityRole="adjustable"
                     // Definimos explícitamente las acciones que TalkBack debe exponer
                     accessibilityActions={[
                         { name: 'increment', label: 'adelantar 10 segundos' },
@@ -283,7 +281,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         paddingHorizontal: 10,
-        marginTop: -10, 
+        marginTop: -10,
     },
     timeText: {
         fontSize: 12,

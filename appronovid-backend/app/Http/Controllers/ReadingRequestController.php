@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\ReadingRequest;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Smalot\PdfParser\Parser as PdfParser;
 
 class ReadingRequestController extends Controller
@@ -14,7 +16,7 @@ class ReadingRequestController extends Controller
     {
         $request->validate([
             'title' => 'required|string|max:255',
-            'category_id' => 'required|exists:categories,id', // 🌟 NUEVO: Validamos la categoría
+            'category_id' => 'required|exists:categories,id',
             'description_or_text' => 'nullable|string',
             'file' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
             'is_public' => 'nullable|boolean',
@@ -26,7 +28,6 @@ class ReadingRequestController extends Controller
             $file = $request->file('file');
             $extension = strtolower($file->getClientOriginalExtension());
 
-            // CASO A: Es un archivo PDF
             if ($extension === 'pdf') {
                 try {
                     $parser = new \Smalot\PdfParser\Parser();
@@ -41,36 +42,31 @@ class ReadingRequestController extends Controller
                 } catch (\Exception $e) {
                     \Illuminate\Support\Facades\Log::error("Error extrayendo texto de PDF: " . $e->getMessage());
                 }
-            }
-            // CASO B: Es una Foto / Imagen (JPG, JPEG, PNG) - AHORA CON OCR.SPACE (100% Gratis)
-            elseif (in_array($extension, ['jpg', 'jpeg', 'png'])) {
+            } elseif (in_array($extension, ['jpg', 'jpeg', 'png'])) {
                 try {
                     $base64Image = base64_encode(file_get_contents($file->getRealPath()));
                     $mimeType = $file->getMimeType();
                     $dataUri = "data:{$mimeType};base64,{$base64Image}";
 
-                    // 1. Hacemos la petición a la API gratuita de OCR.space
                     $response = \Illuminate\Support\Facades\Http::withoutVerifying()
                         ->timeout(60)
-                        ->asForm() // OCR.space requiere formato de formulario, no JSON
+                        ->asForm()
                         ->post('https://api.ocr.space/parse/image', [
-                            'apikey' => 'helloworld', // Clave pública gratuita (podés registrar la tuya gratis en su web)
+                            'apikey' => 'helloworld',
                             'base64Image' => $dataUri,
-                            'language' => 'spa', // Seteado en español para que lea bien las 'ñ' y tildes
-                            'scale' => 'true',   // Agranda la imagen internamente para leer mejor
-                            'OCREngine' => '2'   // Usa su motor más avanzado
+                            'language' => 'spa',
+                            'scale' => 'true',
+                            'OCREngine' => '2'
                         ]);
 
                     if ($response->successful()) {
                         $resultado = $response->json();
 
-                        // Verificamos si la API de OCR tuvo algún problema procesando la foto
                         if (isset($resultado['IsErroredOnProcessing']) && $resultado['IsErroredOnProcessing']) {
                             \Illuminate\Support\Facades\Log::error("OCR.space falló: " . json_encode($resultado['ErrorMessage']));
                             return response()->json(['message' => 'Error al leer la imagen. Intentá con otra más nítida.'], 422);
                         }
 
-                        // 2. Extraemos y juntamos el texto reconocido
                         $textoEscaneado = '';
                         if (isset($resultado['ParsedResults']) && count($resultado['ParsedResults']) > 0) {
                             $textoEscaneado = $resultado['ParsedResults'][0]['ParsedText'] ?? '';
@@ -98,10 +94,9 @@ class ReadingRequestController extends Controller
             $path = null;
         }
 
-        // Guardamos en la base de datos
         $readingRequest = new \App\Models\ReadingRequest();
         $readingRequest->title = $request->title;
-        $readingRequest->category_id = $request->category_id; // 🌟 NUEVO: Guardamos la categoría
+        $readingRequest->category_id = $request->category_id;
         $readingRequest->description_or_text = $textoFinal;
         $readingRequest->file_path = $path;
         $readingRequest->status = 'pending';
@@ -134,7 +129,6 @@ class ReadingRequestController extends Controller
         ]);
 
         $readingRequest = \App\Models\ReadingRequest::findOrFail($id);
-
         $readingRequest->status = 'validating';
         $readingRequest->save();
 
@@ -162,11 +156,46 @@ class ReadingRequestController extends Controller
         return response()->json(['message' => '¡Audio recibido! Procesando calidad.']);
     }
 
+    // 🌟 FUNCIÓN ACTUALIZADA: Mis Audios
     public function myRequests(Request $request)
     {
-        $requests = ReadingRequest::where('oyente_id', $request->user()->id)
+        $userId = $request->user()->id;
+
+        // Sumamos "with('category')" para que mande la etiqueta de categoría correctamente
+        $requests = ReadingRequest::with('category')->where('oyente_id', $userId)
             ->orderBy('created_at', 'desc')
-            ->get();
+            ->get()
+            ->map(function ($item) use ($userId) {
+                $voluntario = $item->voluntario_id ? User::find($item->voluntario_id) : null;
+
+                // 🌟 Búsqueda a prueba de balas: Chequea el ID como número, string o con prefijo
+                $hasVoted = DB::table('volunteer_ratings')
+                    ->where(function ($q) use ($item) {
+                        $q->where('audio_id', $item->id)
+                            ->orWhere('audio_id', (string)$item->id)
+                            ->orWhere('audio_id', 'req_' . $item->id);
+                    })
+                    // ⚠️ ATENCIÓN: Si tu base de datos usa "oyente_id" para el votante, cambialo en la línea de abajo:
+                    ->where('user_id', $userId)
+                    ->exists();
+
+                return [
+                    'id' => $item->id,
+                    'title' => $item->title,
+                    'description_or_text' => $item->description_or_text,
+                    'status' => $item->status,
+                    'audio_path' => $item->audio_path,
+                    'is_public' => $item->is_public,
+                    'created_at' => $item->created_at,
+                    'author' => null,
+
+                    'reader' => $voluntario ? $voluntario->name : null,
+                    'reader_id' => $item->voluntario_id,
+                    'reader_stars' => $voluntario ? $voluntario->stars : null,
+                    'category_name' => $item->category ? $item->category->name : 'Sin categoría',
+                    'has_voted' => $hasVoted,
+                ];
+            });
 
         return response()->json([
             'data' => $requests
@@ -185,34 +214,28 @@ class ReadingRequestController extends Controller
 
         $request->validate([
             'title' => 'sometimes|string|max:255',
-            'category_id' => 'sometimes|exists:categories,id', // 🌟 NUEVO: Validamos si lo edita
+            'category_id' => 'sometimes|exists:categories,id',
             'description_or_text' => 'sometimes|string',
             'is_public' => 'sometimes|boolean'
         ]);
 
-        // 🌟 NUEVO: Sumamos la categoría a los campos que se pueden actualizar
         $readingRequest->update($request->only(['title', 'category_id', 'description_or_text', 'is_public']));
 
         return response()->json(['message' => 'Pedido actualizado con éxito.', 'data' => $readingRequest]);
     }
 
-    // Eliminar un pedido
     public function destroy(Request $request, $id)
     {
         $readingRequest = \App\Models\ReadingRequest::findOrFail($id);
 
-        // 🌟 MAGIA: Permitimos borrar si es un Administrador, O si es el Oyente que lo creó.
         if ($request->user()->role !== 'admin' && $readingRequest->oyente_id !== $request->user()->id) {
             return response()->json(['message' => 'No tienes permiso para eliminar este pedido.'], 403);
         }
 
-        // Si es un oyente intentando borrar, no lo dejamos si ya está en proceso.
-        // (El admin sí puede borrarlo en cualquier momento).
         if ($request->user()->role !== 'admin' && $readingRequest->status !== 'pending') {
             return response()->json(['message' => 'No podés eliminar un pedido en proceso.'], 403);
         }
 
-        // Si tiene una imagen asociada, la borramos del storage
         if ($readingRequest->image_path) {
             \Illuminate\Support\Facades\Storage::disk('public')->delete($readingRequest->image_path);
         }
@@ -222,16 +245,49 @@ class ReadingRequestController extends Controller
         return response()->json(['message' => 'Pedido eliminado correctamente.']);
     }
 
+    // 🌟 FUNCIÓN ACTUALIZADA: Catálogo Público
     public function catalog(Request $request)
     {
-        $query = \App\Models\ReadingRequest::where('is_public', true)
+        // Identificamos al usuario para saber qué audios del catálogo ya votó
+        $userId = $request->user()->id;
+
+        $query = \App\Models\ReadingRequest::with('category')->where('is_public', true)
             ->where('status', 'completed');
 
         if ($request->has('search') && !empty($request->search)) {
             $query->where('title', 'like', '%' . $request->search . '%');
         }
 
-        $catalog = $query->orderBy('updated_at', 'desc')->get();
+        // Mapeamos el catálogo igual que Mis Audios
+        $catalog = $query->orderBy('updated_at', 'desc')->get()->map(function ($item) use ($userId) {
+            $voluntario = $item->voluntario_id ? User::find($item->voluntario_id) : null;
+
+            $hasVoted = DB::table('volunteer_ratings')
+                ->where(function ($q) use ($item) {
+                    $q->where('audio_id', $item->id)
+                        ->orWhere('audio_id', (string)$item->id)
+                        ->orWhere('audio_id', 'req_' . $item->id);
+                })
+                // ⚠️ IMPORTANTE: De nuevo, si tu columna se llama oyente_id, cambialo acá:
+                ->where('user_id', $userId)
+                ->exists();
+
+            return [
+                'id' => $item->id,
+                'title' => $item->title,
+                'description_or_text' => $item->description_or_text,
+                'status' => $item->status,
+                'audio_path' => $item->audio_path,
+                'is_public' => $item->is_public,
+                'created_at' => $item->created_at,
+
+                'reader' => $voluntario ? $voluntario->name : null,
+                'reader_id' => $item->voluntario_id,
+                'reader_stars' => $voluntario ? $voluntario->stars : null,
+                'category_name' => $item->category ? $item->category->name : 'Sin categoría',
+                'has_voted' => $hasVoted,
+            ];
+        });
 
         return response()->json([
             'success' => true,

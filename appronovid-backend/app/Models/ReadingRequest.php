@@ -16,6 +16,11 @@ class ReadingRequest extends Model
         return $this->belongsTo(User::class, 'oyente_id');
     }
 
+    public function voluntario()
+    {
+        return $this->belongsTo(User::class, 'voluntario_id');
+    }
+
     public function tasks()
     {
         return $this->hasMany(TaskQueue::class);

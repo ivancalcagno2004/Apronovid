@@ -8,6 +8,7 @@ use App\Http\Controllers\VolunteerRecordingController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\FeedbackController;
+use App\Http\Controllers\RatingController;
 use Illuminate\Support\Facades\Log;
 
 // Rutas Públicas
@@ -42,6 +43,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/feedback', [FeedbackController::class, 'store']);
     Route::get('/admin/feedback', [FeedbackController::class, 'index']);
     Route::delete('/admin/feedback/{id}', [FeedbackController::class, 'destroy']);
+    Route::post('/volunteers/{volunteerId}/rate', [RatingController::class, 'rateVolunteer']);
+    Route::get('/volunteer/stats', [VolunteerRecordingController::class, 'getStats']);
+    Route::get('/volunteer/{id}/public-stats', [VolunteerRecordingController::class, 'getPublicStats']);
 
     // --- AUDIOS Y GRABACIONES ---
     Route::post('/reading-requests/{id}/audio', [ReadingRequestController::class, 'uploadAudio']);
@@ -55,9 +59,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // --- RUTAS DE ADMINISTRACIÓN (Requieren rol de admin) ---
     Route::middleware([\App\Http\Middleware\IsAdmin::class])->prefix('admin')->group(function () {
-        Route::get('/catalog', [\App\Http\Controllers\Admin\CatalogController::class, 'index']); // 🌟 Nueva
+        Route::get('/catalog', [\App\Http\Controllers\Admin\CatalogController::class, 'index']);
         Route::post('/catalog', [\App\Http\Controllers\Admin\CatalogController::class, 'store']);
-        Route::delete('/catalog/{id}', [\App\Http\Controllers\Admin\CatalogController::class, 'destroy']); // 🌟 Nueva
+        Route::delete('/catalog/{id}', [\App\Http\Controllers\Admin\CatalogController::class, 'destroy']);
+        Route::get('/manual-reviews', [\App\Http\Controllers\Admin\CatalogController::class, 'getManualReviews']);
+        Route::post('/manual-reviews/{id}/approve', [\App\Http\Controllers\Admin\CatalogController::class, 'approveReview']);
+        Route::post('/manual-reviews/{id}/reject', [\App\Http\Controllers\Admin\CatalogController::class, 'rejectReview']);
     });
 });
 // 🌟 RUTA DE AUDIO DEFINITIVA

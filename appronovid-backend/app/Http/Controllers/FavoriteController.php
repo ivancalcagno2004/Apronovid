@@ -6,15 +6,14 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\ReadingRequest;
 use App\Models\Audiobook;
+use App\Models\User; // 🌟 IMPORTANTE: Agregamos el modelo User
 
 class FavoriteController extends Controller
 {
-    // Trae y combina los favoritos de ambas tablas
     public function index(Request $request)
     {
         $userId = $request->user()->id;
 
-        // Obtenemos todos los strings de favoritos (ej: ['hist_13', 'req_25'])
         $catalogIds = DB::table('favorites')
             ->where('user_id', $userId)
             ->pluck('catalog_id');
@@ -30,10 +29,9 @@ class FavoriteController extends Controller
             }
         }
 
-        // 🌟 1. Buscamos los históricos y los convertimos a ARRAY simple
         $historical = Audiobook::with('category')->whereIn('id', $histIds)->get()->map(function ($item) {
             return [
-                'id' => 'hist_' . $item->id, // Acá Laravel ya no nos borra el texto
+                'id' => 'hist_' . $item->id,
                 'title' => $item->title,
                 'audio_path' => ltrim(str_replace(asset('storage/'), '', $item->audio_path), '/'),
                 'created_at' => $item->created_at,
@@ -43,24 +41,29 @@ class FavoriteController extends Controller
             ];
         });
 
-        // 🌟 2. Buscamos los pedidos de lectura comunitarios y los convertimos a ARRAY
         $requests = ReadingRequest::with('category')->whereIn('id', $reqIds)->get()->map(function ($item) {
+            // 🌟 Buscamos al voluntario en la base de datos
+            $voluntario = $item->voluntario_id ? User::find($item->voluntario_id) : null;
+
             return [
-                'id' => 'req_' . $item->id, // Acá tampoco lo borra
+                'id' => 'req_' . $item->id,
                 'title' => $item->title,
                 'audio_path' => $item->audio_path,
                 'created_at' => $item->created_at,
                 'author' => 'Pedido de Oyente',
-                'reader' => null,
+
+                // 🌟 AHORA SÍ MANDAMOS LOS DATOS DEL NARRADOR
+                'reader' => $voluntario ? $voluntario->name : null,
+                'reader_id' => $item->voluntario_id,
+                'reader_stars' => $voluntario ? $voluntario->stars : null,
+
                 'category_name' => $item->category ? $item->category->name : 'Sin categoría',
             ];
         });
 
-        // Juntamos ambos resultados y los mandamos al frontend
         return response()->json($historical->concat($requests));
     }
 
-    // Agrega o quita el favorito usando el string completo con prefijo
     public function toggle(Request $request, $id)
     {
         $userId = $request->user()->id;

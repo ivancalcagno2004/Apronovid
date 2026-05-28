@@ -2,6 +2,9 @@
 
 # dependencies
 node_modules/
+.vscode/
+.claude/
+CLAUDE.md
 
 # Expo
 .expo/

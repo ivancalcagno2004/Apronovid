@@ -9,7 +9,7 @@ import {GoogleSignin, statusCodes} from '@react-native-google-signin/google-sign
 import Toast from 'react-native-toast-message';
 
 // ID de cliente de Google
-const GOOGLE_CLIENT_ID = '33944635259-jl535l4cfntf17pq5pqdae952l8n3r8t.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID = '985023057997-rh5r30seb1kl783ou3vvaa14l96dutmn.apps.googleusercontent.com';
 
 GoogleSignin.configure({
   webClientId: GOOGLE_CLIENT_ID,

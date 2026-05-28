@@ -5,6 +5,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import api from '../../services/api';
 import { Theme } from '../../styles/theme';
 import Toast from 'react-native-toast-message';
+import * as Device from 'expo-device';
+import * as Notifications from 'expo-notifications';
 
 const logoMedalla = require('../../../assets/favicon.png');
 
@@ -35,7 +37,39 @@ export default function AdminDashboard() {
             }
         };
         fetchCategories();
+        registerForPushNotificationsAsync();
     }, []);
+
+    async function registerForPushNotificationsAsync() {
+    let token;
+    if (Device.isDevice) {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      
+      if (finalStatus !== 'granted') {
+        console.log('Fallo al obtener los permisos para notificaciones push en el Oyente');
+        return;
+      }
+      
+      token = (await Notifications.getExpoPushTokenAsync({
+        projectId: 'a96ae1b8-859f-4e54-b5dd-bc5b43f487cf'
+      })).data;
+      
+      try {
+        await api.post('/user/push-token', { token: token }); 
+        console.log('Token del Oyente guardado en Laravel:', token);
+      } catch (error) {
+        console.error('Error enviando el token del Oyente:', error);
+      }
+    } else {
+      console.log('Las Push Notifications necesitan un dispositivo físico para funcionar.');
+    }
+  }
 
     const pickAudio = async () => {
         let result = await DocumentPicker.getDocumentAsync({ type: 'audio/*' });

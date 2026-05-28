@@ -14,14 +14,21 @@ class CatalogController extends Controller
         $search = $request->query('search');
         $categoryId = $request->query('category_id');
 
-        // 🌟 1. Obtenemos los favoritos del usuario actual (si está logueado)
+        // 🌟 1. Obtenemos los favoritos Y LOS VOTOS del usuario actual
         $userId = $request->user()?->id;
         $userFavorites = [];
+        $userVotes = []; // <-- NUEVO
 
         if ($userId) {
             $userFavorites = DB::table('favorites')
                 ->where('user_id', $userId)
                 ->pluck('catalog_id')
+                ->toArray();
+
+            // <-- NUEVO: Buscamos qué audios ya votó
+            $userVotes = DB::table('volunteer_ratings')
+                ->where('user_id', $userId)
+                ->pluck('audio_id')
                 ->toArray();
         }
 
@@ -54,7 +61,8 @@ class CatalogController extends Controller
         });
 
         // 3. Buscar en Pedidos Públicos de la Comunidad (ReadingRequests)
-        $requestsQuery = ReadingRequest::with('category')
+        // 🌟 IMPORTANTE: Agregamos 'volunteer' al with() para traernos los datos del usuario que grabó
+        $requestsQuery = ReadingRequest::with(['category', 'voluntario'])
             ->where('is_public', true)
             ->where('status', 'completed')
             ->whereNotNull('audio_path');
@@ -73,8 +81,12 @@ class CatalogController extends Controller
                 'title' => $req->title,
                 'audio_path' => $req->audio_path,
                 'created_at' => $req->created_at,
-                'author' => 'Pedido de Oyente', // Texto por defecto
-                'reader' => null, // Opcional: podrías traer el nombre del voluntario con una relación
+                'author' => null,
+
+                'reader' => $req->voluntario ? $req->voluntario->name : 'Voluntario Anónimo',
+                'reader_id' => $req->voluntario ? $req->voluntario->id : null,
+                'reader_stars' => $req->voluntario ? $req->voluntario->stars : null,
+
                 'category_name' => $req->category ? $req->category->name : 'Sin categoría',
             ];
         });
@@ -83,9 +95,10 @@ class CatalogController extends Controller
         $catalog = $audiobooks->concat($publicRequests)
             ->sortByDesc('created_at')
             ->values()
-            ->map(function ($item) use ($userFavorites) {
+            ->map(function ($item) use ($userFavorites, $userVotes) {
                 // Chequeamos si el ID (ej: 'hist_13') está en la lista de favoritos del usuario
                 $item['is_favorite'] = in_array($item['id'], $userFavorites);
+                $item['has_voted'] = in_array($item['id'], $userVotes);
                 return $item;
             });
 

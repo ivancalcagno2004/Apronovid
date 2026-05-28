@@ -28,6 +28,22 @@ class User extends Authenticatable
         'remember_token',
     ];
 
+    protected $appends = ['stars'];
+
+    public function getStarsAttribute()
+    {
+        $totalVotes = $this->total_likes + $this->total_dislikes;
+
+        if ($totalVotes < 5) {
+            return null;
+        }
+
+        $percentage = $this->total_likes / $totalVotes;
+
+        // Retorna el cálculo sobre 5, redondeado a 1 decimal (ej: 4.8)
+        return round($percentage * 5, 1);
+    }
+
     protected function casts(): array
     {
         return [

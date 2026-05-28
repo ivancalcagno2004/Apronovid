@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, TextInput, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Image, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Image, ScrollView, Alert, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api, { SERVER_URL } from '../../services/api';
 import { Theme } from '../../styles/theme';
 import AudioPlayer from '../utils/AudioPlayer';
 import Toast from 'react-native-toast-message';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useRoute } from '@react-navigation/native';
+import RatingButtons from './RatingButtons';
 
-// 🌟 IMPORTANTE: Importá tu contexto de autenticación acá para obtener el rol. 
-// (Ajustá la ruta según la estructura de tus carpetas)
 import { useAuth } from '../../context/AuthContext'; 
 
 const logoMedalla = require('../../../assets/favicon.png');
@@ -20,8 +19,11 @@ interface CatalogItem {
   created_at: string;
   author?: string; 
   reader?: string; 
+  reader_id?: number; 
+  reader_stars?: number | null; 
   category_name?: string;
   is_favorite?: boolean;
+  has_voted?: boolean;
 }
 
 interface Category {
@@ -30,7 +32,6 @@ interface Category {
 }
 
 export default function CatalogScreen() {
-  // 🌟 Obtenemos al usuario para saber si es administrador
   const { user } = useAuth(); 
 
   const [items, setItems] = useState<CatalogItem[]>([]);
@@ -40,6 +41,11 @@ export default function CatalogScreen() {
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
+
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [publicProfileData, setPublicProfileData] = useState<any>(null);
+
+  const route = useRoute<any>();
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -51,7 +57,19 @@ export default function CatalogScreen() {
       }
     };
     fetchCategories();
-  }, []);
+  }, []); 
+
+  useEffect(() => {
+    if (route.params?.autoPlayId) {
+      // Limpiamos los filtros por si acaso el audio estaba oculto por otra categoría
+      setSearch('');
+      setSelectedCategory('all');
+      
+      // Establecemos este audio como el activo para que el reproductor lo despliegue
+      setPlayingId(route.params.autoPlayId);
+
+    }
+  }, [route.params?.autoPlayId]);
 
   useFocusEffect(
   useCallback(() => {
@@ -79,7 +97,6 @@ export default function CatalogScreen() {
   };
 
   const toggleFavorite = async (item: CatalogItem) => {
-    // 1. Actualización Optimista: Cambiamos el icono INSTANTÁNEAMENTE en la pantalla
     setItems((currentItems) => 
       currentItems.map((currentItem) => 
         currentItem.id === item.id 
@@ -89,20 +106,15 @@ export default function CatalogScreen() {
     );
 
     try {
-        // 2. Le avisamos a Laravel por atrás que cambie el estado en la base de datos
         await api.post(`/favorites/${item.id}/toggle`);
-        
         Toast.show({ 
             type: 'success', 
             text1: 'Favoritos actualizados', 
             position: 'bottom', 
             text2: item.is_favorite ? 'El audio fue removido de tus favoritos.' : 'El audio fue agregado a tus favoritos.' 
         });
-        
         fetchCatalog();
-        
     } catch (error) {
-        console.error(error);
         setItems((currentItems) => 
           currentItems.map((currentItem) => 
             currentItem.id === item.id 
@@ -114,7 +126,6 @@ export default function CatalogScreen() {
     }
   };
 
-  // 🌟 NUEVO: Función de borrado inteligente y blindada
   const handleDelete = (item: CatalogItem) => {
     Alert.alert(
         "Eliminar Audio",
@@ -128,8 +139,6 @@ export default function CatalogScreen() {
                     try {
                         const idStr = item.id.toString();
                         const realId = idStr.replace('hist_', '').replace('req_', '');
-
-                        // 🌟 Lógica blindada para evitar confusiones de URL
                         let isHistorical = false;
                         
                         if (idStr.startsWith('hist_')) {
@@ -138,9 +147,6 @@ export default function CatalogScreen() {
                             isHistorical = false;
                         } else if (item.audio_path && item.audio_path.includes('catalog_audios')) {
                             isHistorical = true;
-                        } else {
-                            // Si no tiene prefijos y la ruta no es catalog_audios, asumimos 100% que es un pedido
-                            isHistorical = false; 
                         }
 
                         const endpoint = isHistorical 
@@ -148,7 +154,6 @@ export default function CatalogScreen() {
                             : `/reading-requests/${realId}`;
 
                         await api.delete(endpoint);
-                        
                         Toast.show({ type: 'success', text1: 'Eliminado', text2: 'El audio fue removido.', position: 'bottom' });
                         fetchCatalog(search, selectedCategory); 
                     } catch (error) {
@@ -160,10 +165,19 @@ export default function CatalogScreen() {
     );
   };
 
+  const showVolunteerProfile = async (volunteerId: number) => {
+    try {
+      const response = await api.get(`/volunteer/${volunteerId}/public-stats`);
+      setPublicProfileData(response.data);
+      setIsModalVisible(true);
+    } catch (error) {
+      Toast.show({ type: 'error', text1: 'Error', text2: 'No se pudo cargar el perfil del voluntario.', position: 'bottom' });
+    }
+  };
+
   const renderItem = ({ item }: { item: CatalogItem }) => (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
-        {/* Envolvemos el título en un flex: 1 para que deje lugar al botón de basura */}
         <View style={{ flex: 1, marginRight: 10 }}>
             <Text style={styles.cardTitle}>{item.title}</Text>
             {item.category_name && (
@@ -173,45 +187,59 @@ export default function CatalogScreen() {
             )}
         </View>
 
-        {/* 🌟 NUEVO: Botón de Borrar (Sólo visible para admins) */}
         {user?.role === 'admin' && (
             <TouchableOpacity onPress={() => handleDelete(item)} style={styles.deleteButton}>
                 <Ionicons name="trash-outline" size={22} color={Theme.colors.danger} />
             </TouchableOpacity>
         )}
 
-        {/* 🌟 NUEVO: Botón de Favorito */}
         {user?.role === 'oyente' && (
-          <TouchableOpacity onPress={() => toggleFavorite(item)} style={styles.favoriteButton} accessibilityLabel={item.is_favorite ? `Quitar ${item.title} de favoritos` : `Agregar ${item.title} a favoritos`} accessibilityRole="button">
-              <Ionicons 
-                  name={item.is_favorite ? "heart" : "heart-outline"} 
-                  size={22} 
-                  color={item.is_favorite ? Theme.colors.danger : Theme.colors.textMuted} 
-              />
+          <TouchableOpacity onPress={() => toggleFavorite(item)} style={styles.favoriteButton} accessibilityRole="button">
+              <Ionicons name={item.is_favorite ? "heart" : "heart-outline"} size={22} color={item.is_favorite ? Theme.colors.danger : Theme.colors.textMuted} />
           </TouchableOpacity>
         )}
       </View>
       
       {item.author && <Text style={styles.metaText}>✍️ Autor: {item.author}</Text>}
-      {item.reader && <Text style={styles.metaText}>🎙️ Voz: {item.reader}</Text>}
+      
+      {item.reader && (
+        item.reader_id ? (
+          <TouchableOpacity 
+            onPress={() => showVolunteerProfile(item.reader_id!)}
+            accessible={true}
+            accessibilityRole="button"
+            style={{ marginBottom: 4 }}
+          >
+            <Text style={[styles.volunteerName, { color: Theme.colors.primary, textDecorationLine: 'underline' }]}>
+              🎙️ Voz: {item.reader} {item.reader_stars ? `(⭐ ${item.reader_stars})` : '(Nuevo)'}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={[styles.volunteerName, { marginBottom: 4 }]} accessible={true}>
+            🎙️ Voz: {item.reader}
+          </Text>
+        )
+      )}
+
       {!item.author && <Text style={styles.cardDate}>Añadido el {new Date(item.created_at).toLocaleDateString()}</Text>}
       
       <View style={styles.playerContainer}>
         <AudioPlayer 
-          // ✅ La ruta oficial de storage que ya comprobaste que funciona perfecto
           audioUrl={`${SERVER_URL}/storage/${item.audio_path.replace(/^\//, '')}`} 
           id={item.id} 
           activeId={playingId} 
-          accessibilityLabel={`Reproducir audio: ${item.title}`}
           onPlay={(id) => setPlayingId(String(id))} 
         />
       </View>
+      
+      {user?.role === 'oyente' && item.reader_id && !item.has_voted && (
+        <RatingButtons volunteerId={item.reader_id} audioId={item.id} />
+      )}
     </View>
   );
 
   return (
     <View style={styles.container}>
-      {/* 🌟 Header modificado para coincidir con las demás pantallas */}
       <View style={styles.header}>
         <View style={styles.headerBrand}>
             <Image source={logoMedalla} style={styles.headerLogo} />
@@ -246,9 +274,7 @@ export default function CatalogScreen() {
                 style={[styles.categoryChip, isSelected && styles.categoryChipSelected]}
                 onPress={() => setSelectedCategory(cat.id)}
               >
-                <Text style={[styles.categoryChipText, isSelected && styles.categoryChipTextSelected]}>
-                  {cat.name}
-                </Text>
+                <Text style={[styles.categoryChipText, isSelected && styles.categoryChipTextSelected]}>{cat.name}</Text>
               </TouchableOpacity>
             );
           })}
@@ -272,14 +298,85 @@ export default function CatalogScreen() {
           }
         />
       )}
+
+      {/* 🌟 MODAL MODERNO CON 3 COLUMNAS */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={isModalVisible}
+        onRequestClose={() => setIsModalVisible(false)} 
+        accessibilityViewIsModal={true} 
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            
+            {publicProfileData ? (
+              <>
+                <View style={styles.modalHeader}>
+                  <View style={styles.modalIconContainer}>
+                    <Ionicons name="person-circle" size={60} color={Theme.colors.primary} />
+                  </View>
+                  <Text style={styles.modalName} accessibilityRole="header">
+                    {publicProfileData.name}
+                  </Text>
+                  <Text style={styles.modalSubtitle}>Narrador Voluntario</Text>
+                </View>
+
+                <View style={styles.modalStatsContainer}>
+                  <View style={styles.modalStatBox} accessible={true} accessibilityLabel={`${publicProfileData.public_audios} audios públicos.`}>
+                    <Text style={styles.modalStatNumber}>{publicProfileData.public_audios}</Text>
+                    <Text style={styles.modalStatLabel}>Públicos</Text>
+                  </View>
+
+                  <View style={styles.modalStatBox} accessible={true} accessibilityLabel={`${publicProfileData.private_audios} audios privados.`}>
+                    <Text style={styles.modalStatNumber}>{publicProfileData.private_audios}</Text>
+                    <Text style={styles.modalStatLabel}>Privados</Text>
+                  </View>
+
+                  <View style={styles.modalStatBox} accessible={true} accessibilityLabel={publicProfileData.stars ? `Calificación de ${publicProfileData.stars} estrellas.` : 'Sin calificación'}>
+                    <Text style={styles.modalStatNumber}>
+                      {publicProfileData.stars ? publicProfileData.stars : '--'}
+                      {publicProfileData.stars && <Ionicons name="star" size={14} color="#FFD700" style={{ marginLeft: 2 }} />}
+                    </Text>
+                    <Text style={styles.modalStatLabel}>Estrellas</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.modalBadgesTitle} accessibilityRole="header">Logros Destacados</Text>
+                
+                {publicProfileData.badges && publicProfileData.badges.length > 0 ? (
+                  <View style={styles.modalBadgesList}>
+                    {publicProfileData.badges.map((badgeName: string, index: number) => (
+                      <View key={index} style={styles.modalBadgeItem} accessible={true} accessibilityLabel={`Medalla: ${badgeName}`}>
+                        <Ionicons name="medal" size={20} color="#FFD700" style={{ marginRight: 10 }} />
+                        <Text style={styles.modalBadgeText}>{badgeName}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.modalEmptyText} accessible={true}>Este voluntario aún no ha desbloqueado medallas.</Text>
+                )}
+              </>
+            ) : (
+              <ActivityIndicator size="large" color={Theme.colors.primary} style={{ marginVertical: 30 }} />
+            )}
+
+            <TouchableOpacity 
+              style={styles.modalCloseBtn} 
+              onPress={() => setIsModalVisible(false)}
+              accessibilityRole="button"
+            >
+              <Text style={styles.modalCloseText}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Theme.colors.background, paddingTop: Theme.spacing.padding },
-  
-  // 🌟 Estilos del Header actualizados unificados
   header: { marginBottom: 20, paddingHorizontal: Theme.spacing.padding, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: Theme.colors.border },
   headerBrand: { flexDirection: 'row', alignItems: 'center' },
   headerLogo: { width: 36, height: 36, marginRight: 12 },
@@ -298,19 +395,36 @@ const styles = StyleSheet.create({
   listContent: { paddingBottom: 40, paddingHorizontal: Theme.spacing.padding },
   card: { backgroundColor: Theme.colors.backgroundCard, padding: 20, borderRadius: Theme.spacing.borderRadiusCard, marginBottom: 16, borderWidth: 1, borderColor: Theme.colors.border, elevation: 1 },
   
-  // Modificaciones en la cabecera de la tarjeta
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
   cardTitle: { fontSize: 18, fontWeight: 'bold', color: Theme.colors.text, marginBottom: 5 },
   categoryBadge: { backgroundColor: '#E3F2FD', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start' },
   categoryBadgeText: { color: '#0D6EFD', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' },
   
-  // 🌟 Estilo del botón de eliminar
   deleteButton: { padding: 8, backgroundColor: '#FFEBEE', borderRadius: 8 },
-
   metaText: { fontSize: 14, color: '#555', marginBottom: 4, fontWeight: '500' },
+  volunteerName: { fontSize: 14, color: '#555', marginBottom: 4, fontWeight: '500' },
   cardDate: { fontSize: 12, color: Theme.colors.textMuted, marginBottom: 10 },
   playerContainer: { marginTop: 10 },
   emptyState: { alignItems: 'center', justifyContent: 'center', marginTop: 60, paddingHorizontal: 30 },
   emptyText: { fontSize: 16, color: Theme.colors.textMuted, textAlign: 'center', marginTop: 15 },
   favoriteButton: { padding: 8, marginLeft: 10, backgroundColor: '#FFEDED', borderRadius: 8 },
+
+  // 🌟 MODAL (Ajustado para 3 columnas)
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalContent: { width: '100%', backgroundColor: Theme.colors.backgroundCard, borderRadius: 20, padding: 24, elevation: 10 },
+  modalHeader: { alignItems: 'center', marginBottom: 20 },
+  modalIconContainer: { marginBottom: 10 },
+  modalName: { fontSize: 22, fontWeight: 'bold', color: Theme.colors.text, textAlign: 'center' },
+  modalSubtitle: { fontSize: 14, color: Theme.colors.textMuted, marginTop: 2 },
+  modalStatsContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 },
+  modalStatBox: { flex: 1, backgroundColor: Theme.colors.background, padding: 12, borderRadius: 12, alignItems: 'center', marginHorizontal: 4, borderWidth: 1, borderColor: Theme.colors.border },
+  modalStatNumber: { fontSize: 20, fontWeight: 'bold', color: Theme.colors.primary, flexDirection: 'row', alignItems: 'center' },
+  modalStatLabel: { fontSize: 12, color: Theme.colors.textMuted, marginTop: 4 },
+  modalBadgesTitle: { fontSize: 16, fontWeight: 'bold', color: Theme.colors.text, marginBottom: 15 },
+  modalBadgesList: { marginBottom: 10 },
+  modalBadgeItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF9E6', padding: 12, borderRadius: 10, marginBottom: 8, borderWidth: 1, borderColor: '#FFE8A1' },
+  modalBadgeText: { fontSize: 15, color: '#333', fontWeight: '500' },
+  modalEmptyText: { fontSize: 14, color: Theme.colors.textMuted, fontStyle: 'italic', textAlign: 'center', marginBottom: 20 },
+  modalCloseBtn: { backgroundColor: Theme.colors.border, padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 15 },
+  modalCloseText: { color: Theme.colors.text, fontSize: 16, fontWeight: 'bold' }
 });

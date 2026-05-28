@@ -11,14 +11,17 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Cache;
 
 class ValidateAudioJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $requestId; // (Ojo: Aunque se llame requestId, acá le estás pasando el ID del recording, lo cual está perfecto).
+    public $requestId;
     public $timeout = 300;
+
+    // Permitimos 3 intentos antes de rendirnos
+    public $tries = 3;
 
     public function __construct($requestId)
     {
@@ -33,8 +36,6 @@ class ValidateAudioJob implements ShouldQueue
         if (!$recording || !$recording->audio_path) return;
 
         $textoOriginal = $readingRequest->description_or_text;
-
-        // 🛠️ CORREGIDO: La ruta absoluta sale de $recording
         $audioPathAbsoluto = storage_path('app/public/' . $recording->audio_path);
 
         if (empty(trim($textoOriginal))) {
@@ -47,30 +48,24 @@ class ValidateAudioJob implements ShouldQueue
             $groqKey = env('GROQ_API_KEY');
             if (!$groqKey) {
                 Log::error("Falta GROQ_API_KEY en el archivo .env");
-                return;
+                throw new \Exception("Falta API KEY"); // Forzamos el catch
             }
 
-            // 1. Creamos el cliente web que ignora el error de certificado SSL en Windows
             $guzzleClient = new \GuzzleHttp\Client(['verify' => false]);
-
-            // 2. Iniciamos el SDK de OpenAI, pero lo engañamos para que use los servidores gratuitos de Groq
             $client = \OpenAI::factory()
                 ->withApiKey($groqKey)
                 ->withBaseUri('https://api.groq.com/openai/v1')
                 ->withHttpClient($guzzleClient)
                 ->make();
 
-            // 3. Enviamos el archivo de audio directamente al modelo Whisper de Groq
             $response = $client->audio()->transcribe([
                 'model' => 'whisper-large-v3',
-                'file' => fopen($audioPathAbsoluto, 'r'), // fopen lee el archivo pesado de a pedacitos
+                'file' => fopen($audioPathAbsoluto, 'r'),
             ]);
 
-            // Extraemos el texto de la respuesta
             $textoTranscrito = $response->text ?? '';
 
             if (!empty($textoTranscrito)) {
-
                 $recording->ai_transcription = $textoTranscrito;
                 $recording->save();
 
@@ -82,7 +77,6 @@ class ValidateAudioJob implements ShouldQueue
                 );
 
                 if ($porcentajeSimilitud >= 70) {
-                    // ¡APROBADO!
                     $recording->status = 'approved';
                     $recording->save();
 
@@ -93,43 +87,84 @@ class ValidateAudioJob implements ShouldQueue
 
                     $this->sendPush($recording->volunteer_id, '¡Audio publicado! 🎉', "Tu lectura pasó el control de calidad y ya está disponible.");
                     $this->sendPush($readingRequest->oyente_id, '¡Tu solicitud fue grabada! 🎧', "Ya podés escuchar '{$readingRequest->title}'.");
+
+                    if ($readingRequest->is_public) {
+                        try {
+                            $interestedUsers = \App\Models\User::whereNotNull('expo_push_token')
+                                ->where('role', 'oyente')
+                                ->where('id', '!=', $readingRequest->oyente_id)
+                                ->whereHas('favorites', function ($query) use ($readingRequest) {
+                                    $query->where('category_id', $readingRequest->category_id);
+                                })
+                                ->get();
+
+                            $messages = [];
+                            foreach ($interestedUsers as $user) {
+                                // 🌟 LLAVE ÚNICA DEL USUARIO
+                                $cacheKey = 'recommendation_sent_today_' . $user->id;
+
+                                // 🌟 SI YA LO NOTIFICAMOS HOY, LO SALTAMOS
+                                if (Cache::has($cacheKey)) {
+                                    continue;
+                                }
+
+                                $messages[] = [
+                                    'to'     => $user->expo_push_token,
+                                    'sound'  => 'default',
+                                    'title'  => '¡Nuevo audio disponible! 🎧',
+                                    'body'   => "Un voluntario acaba de grabar '{$readingRequest->title}', un audio que podría interesarte.",
+                                    'data'   => [
+                                        'type' => 'recommendation',
+                                        'audio_id' => $readingRequest->id,
+                                        'source' => 'reading_request'
+                                    ]
+                                ];
+
+                                // 🌟 GUARDAMOS EL REGISTRO HASTA LA MEDIANOCHE
+                                Cache::put($cacheKey, true, now()->endOfDay());
+                            }
+
+                            if (!empty($messages)) {
+                                Http::withoutVerifying()->withHeaders([
+                                    'Accept' => 'application/json',
+                                    'Content-Type' => 'application/json',
+                                ])->post('https://exp.host/--/api/v2/push/send', $messages);
+                            }
+                        } catch (\Exception $e) {
+                            Log::error('Error notificaciones recomendación: ' . $e->getMessage());
+                        }
+                    }
                 } else {
-                    // ❌ RECHAZADO POR CALIDAD
                     $recording->status = 'rejected';
                     $recording->save();
 
                     $readingRequest->status = 'pending';
                     $readingRequest->save();
 
-                    $this->sendPush($recording->volunteer_id, 'Audio rechazado por calidad ❌', "Tu lectura de '{$readingRequest->title}' no coincide con el texto original. La IA no aprobó la transcripción.");
+                    $this->sendPush($recording->volunteer_id, 'Audio rechazado por calidad ❌', "Tu lectura no coincide suficientemente con el texto original.");
                 }
             } else {
-                // ❌ RECHAZADO POR FALLO (Vino vacío)
-                $recording->status = 'rejected';
-                $recording->ai_transcription = "La IA no pudo entender el audio.";
-                $recording->save();
-
-                $readingRequest->status = 'pending';
-                $readingRequest->save();
-
-                $this->sendPush($recording->volunteer_id, 'Audio rechazado ❌', "No pudimos validar tu lectura. Por favor, intenta grabar nuevamente en un lugar con menos ruido.");
+                throw new \Exception("Transcripción vacía devuelta por la IA");
             }
         } catch (\Exception $e) {
-            Log::error("Error en Job de IA: " . $e->getMessage());
+            Log::error("Error en Job de IA (Intento " . $this->attempts() . "): " . $e->getMessage());
 
-            if ($e->getCode() === 429) {
-                $this->release(60); // Reintenta en 1 minuto
+            // 🌟 NUEVO: Sistema de degradación elegante (Fallback)
+            if ($this->attempts() < $this->tries) {
+                // Esperamos 1 min, luego 2 min, etc antes de reintentar
+                $this->release(60 * $this->attempts());
                 return;
             }
-            // ❌ RECHAZADO POR ERROR TÉCNICO (El "catch" definitivo)
-            $recording->status = 'rejected';
-            $recording->ai_transcription = "Error técnico al procesar el audio en el servidor.";
+
+            // Si agotamos los intentos, no rechazamos: pasa a Revisión Manual
+            $recording->status = 'manual_review';
+            $recording->ai_transcription = "La IA falló o se saturó. Requiere validación humana.";
             $recording->save();
 
-            $readingRequest->status = 'pending';
+            $readingRequest->status = 'manual_review';
             $readingRequest->save();
 
-            $this->sendPush($recording->volunteer_id, 'Audio rechazado ❌', "Tu lectura de '{$readingRequest->title}' no se pudo validar debido a un error técnico. Por favor, intenta grabar nuevamente.");
+            $this->sendPush($recording->volunteer_id, 'Audio en revisión manual ⏳', "El sistema automático está saturado. Un administrador revisará tu lectura pronto.");
         }
     }
 

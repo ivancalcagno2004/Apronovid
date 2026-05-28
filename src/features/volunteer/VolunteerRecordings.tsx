@@ -50,6 +50,7 @@ export default function VolunteerRecordings() {
       case 'approved': return 'APROBADO';
       case 'rejected': return 'RECHAZADO';
       case 'validating': return 'EVALUANDO';
+      case 'manual_review': return 'REVISIÓN MANUAL';
       default: return status.toUpperCase();
     }
   };
@@ -58,6 +59,7 @@ export default function VolunteerRecordings() {
     const isApproved = item.status === 'approved';
     const isRejected = item.status === 'rejected';
     const isValidating = item.status === 'validating';
+    const isAdminReview = item.status === 'manual_review';
 
     return (
       <View style={[styles.card, isApproved ? styles.cardApproved : (isRejected ? styles.cardRejected : styles.cardPending)]}>
@@ -73,30 +75,49 @@ export default function VolunteerRecordings() {
           </View>
         </View>
 
-        {/* FEEDBACK DE LA IA SI FUE RECHAZADO */}
+        {/* FEEDBACK DE RECHAZO (IA o ADMIN) */}
         {isRejected && item.ai_transcription && (
           <View style={styles.feedbackBox}>
-            <Text style={styles.feedbackTitle}>⚠️ Feedback de la IA:</Text>
+            <Text style={styles.feedbackTitle}>⚠️ Motivo del rechazo:</Text>
+            
             <Text style={styles.feedbackText}>
-              <Text style={{fontWeight: 'bold'}}>Lo que la IA entendió: </Text>
-              "{item.ai_transcription}"
+              {item.ai_transcription.startsWith('Revisión Manual:') ? (
+                // 🌟 Mensaje del Admin
+                item.ai_transcription.replace('Revisión Manual: ', '')
+              ) : (
+                // 🌟 Mensaje de la IA
+                <>
+                  <Text style={{fontWeight: 'bold'}}>Lo que la IA entendió: </Text>
+                  "{item.ai_transcription}"
+                </>
+              )}
             </Text>
-            <Text style={styles.helperText}>Comparalo con el texto original para mejorar la dicción.</Text>
+
+            <Text style={styles.helperText}>
+              {item.ai_transcription.startsWith('Revisión Manual:') 
+                ? 'Por favor, tené en cuenta esta corrección para tu próxima grabación.' 
+                : 'Comparalo con el texto original para mejorar la dicción.'}
+            </Text>
           </View>
         )}
 
         {/* REPRODUCTOR (Solo si ya se procesó, sea aprobado o rechazado) */}
-        {!isValidating ? (
+        {!isValidating && !isAdminReview ? (
           <AudioPlayer 
             audioUrl={`${SERVER_URL}/storage/${item.audio_path}`} 
             id={item.id.toString()} 
             activeId={playingId} 
             onPlay={(id) => setPlayingId(String(id))} 
           />
-        ) : (
+        ) : isValidating ? (
           <View style={styles.validatingContainer}>
             <ActivityIndicator size="small" color={Theme.colors.primary} />
             <Text style={styles.validatingText}>La IA está analizando este audio...</Text>
+          </View>
+        ) : (
+          <View style={styles.validatingContainer}>
+            <ActivityIndicator size="small" color={Theme.colors.primary} />
+            <Text style={styles.validatingText}>Este audio lo está revisando un administrador...</Text>
           </View>
         )}
       </View>

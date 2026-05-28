@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, Linking, ActivityIndicator } from 'react-native';
 import { Audio } from 'expo-av';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import api, { SERVER_URL } from '../../services/api';
 import { Theme } from '../../styles/theme';
+import Toast from 'react-native-toast-message';
+import { WebView } from 'react-native-webview';
+import { Ionicons } from '@expo/vector-icons';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldShowBanner: true,
     shouldShowList: true,
     shouldPlaySound: true,
@@ -27,7 +29,8 @@ export default function VolunteerDashboard({ navigation, route }: any) {
   const [metering, setMetering] = useState(-160);
   const [playbackSound, setPlaybackSound] = useState<Audio.Sound | null>(null);
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
-  const [previewDuration, setPreviewDuration] = useState(0); // Para mostrar cuánto dura
+  const [previewDuration, setPreviewDuration] = useState(0);
+  const [viewMode, setViewMode] = useState<'text' | 'document'>('text');
 
   useEffect(() => {
     registerForPushNotificationsAsync();
@@ -48,7 +51,7 @@ export default function VolunteerDashboard({ navigation, route }: any) {
       const { recording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY,
         (status) => { if (status.metering !== undefined) setMetering(status.metering); },
-        100 
+        100
       );
 
       setRecording(recording);
@@ -66,32 +69,33 @@ export default function VolunteerDashboard({ navigation, route }: any) {
     if (Device.isDevice) {
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
-      
+     
       if (existingStatus !== 'granted') {
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
       }
-      
+     
       if (finalStatus !== 'granted') {
-        console.log('Fallo al obtener los permisos para notificaciones push');
+        Toast.show({
+          type: 'error',
+          text1: 'Permiso denegado',
+          text2: 'Necesitamos acceso a notificaciones para funcionar correctamente.',
+          position: 'bottom'
+        });
         return;
       }
-      
-      // 🌟 ✅ Lo envolvemos TODO en un gran try/catch
+     
       try {
           const tokenData = await Notifications.getExpoPushTokenAsync({
-            projectId: 'a96ae1b8-859f-4e54-b5dd-bc5b43f487cf' // Mantené tu ID de proyecto acá
+            projectId: 'a96ae1b8-859f-4e54-b5dd-bc5b43f487cf'
           });
-          
+         
           token = tokenData.data;
-          
-          // Si conseguimos el token, lo mandamos a Laravel
-          await api.post('/user/push-token', { token: token }); 
+         
+          await api.post('/user/push-token', { token: token });
           console.log('Token guardado exitosamente:', token);
 
       } catch (error) {
-          // Si Google Play Services falla, atrapamos el error silenciosamente
-          // y dejamos que la app siga funcionando sin notificaciones.
           console.log('No se pudo obtener el token Push (Posible emulador sin Google APIs).', error);
       }
     }
@@ -105,7 +109,6 @@ export default function VolunteerDashboard({ navigation, route }: any) {
     } catch (error) { console.error(error); }
   };
 
-  // NUEVO: Reanudar
   const resumeRecording = async () => {
     if (!recording) return;
     try {
@@ -121,12 +124,11 @@ export default function VolunteerDashboard({ navigation, route }: any) {
       setRecording(null);
       setIsRecording(false);
       setIsPaused(false);
-      setAudioUri(null); // No guardamos el URI
+      setAudioUri(null);
       setMetering(-160);
     } catch (error) { console.error(error); }
   };
 
-  // Terminar y preparar para subir
   const stopRecording = async () => {
     if (!recording) return;
     try {
@@ -139,7 +141,6 @@ export default function VolunteerDashboard({ navigation, route }: any) {
     } catch (error) { console.error(error); }
   };
 
-  // 🌟 NUEVO: Funciones para escuchar el audio antes de enviarlo
   const playPreview = async () => {
     if (!audioUri) return;
     try {
@@ -147,7 +148,7 @@ export default function VolunteerDashboard({ navigation, route }: any) {
         await playbackSound.stopAsync();
         await playbackSound.unloadAsync();
       }
-      
+     
       const { sound } = await Audio.Sound.createAsync(
         { uri: audioUri },
         { shouldPlay: true },
@@ -174,9 +175,8 @@ export default function VolunteerDashboard({ navigation, route }: any) {
     }
   };
 
-  // 🌟 IMPORTANTE: Limpiamos el sonido si el voluntario decide descartar el audio
   const discardAudio = () => {
-    stopPreview(); // Frenamos por si estaba sonando
+    stopPreview();
     setAudioUri(null);
   };
 
@@ -186,24 +186,19 @@ export default function VolunteerDashboard({ navigation, route }: any) {
       setIsUploading(true);
       const formData = new FormData();
       const fileType = audioUri.endsWith('.m4a') ? 'audio/m4a' : 'audio/mp4';
-      
+     
       formData.append('audio', {
         uri: audioUri,
         name: `grabacion_${request.id}.m4a`,
         type: fileType,
       } as any);
 
-      // 1. Guardamos la respuesta de la petición en una variable
       const response = await api.post(`/reading-requests/${request.id}/audio`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      // 2. Mostramos el mensaje dinámico que viene de tu backend de Laravel
-      console.log(
-        '¡Audio en camino! 🚀', 
-        response.data.message || 'El audio fue enviado y está en la cola de evaluación.'
-      );
-      
+      console.log('¡Audio en camino! 🚀', response.data.message || 'El audio fue enviado y está en la cola de evaluación.');
+     
       setAudioUri(null);
       navigation.goBack();
     } catch (error: any) {
@@ -214,11 +209,8 @@ export default function VolunteerDashboard({ navigation, route }: any) {
     }
   };
 
-  const openAttachedFile = () => {
-    if (request?.file_path) {
-      Linking.openURL(`${SERVER_URL}/storage/${request.file_path}`);
-    }
-  };
+  // 🌟 ARMAMOS LA RUTA DEL ARCHIVO (Si existe)
+  const attachedFileUrl = request?.file_path ? `${SERVER_URL}/storage/${request.file_path}` : null;
 
   const normalizedVolume = Math.min(Math.max((metering + 60) * (100 / 60), 0), 100);
   let meterColor = Theme.colors.success;
@@ -227,33 +219,78 @@ export default function VolunteerDashboard({ navigation, route }: any) {
 
   return (
     <View style={styles.container}>
-      
-      {/* 1. SECCIÓN DE LECTURA (TELEPROMPTER) */}
+     
+      {/* 1. SECCIÓN DE LECTURA */}
       <View style={styles.readingArea}>
         <Text style={styles.title}>{request?.title || 'Pedido Desconocido'}</Text>
-        
-        {request?.description_or_text ? (
-          <ScrollView style={styles.textScroller} showsVerticalScrollIndicator={true}>
-            <Text style={styles.readingText}>{request.description_or_text}</Text>
-          </ScrollView>
-        ) : (
-          <View style={styles.noTextContainer}>
-            <Text style={styles.noText}>Este pedido no tiene texto tipeado.</Text>
+       
+        {/* 🌟 NUEVAS PESTAÑAS (Solo se muestran si hay archivo adjunto) */}
+        {attachedFileUrl && (
+          <View style={styles.tabsContainer}>
+            <TouchableOpacity
+              style={[styles.tabButton, viewMode === 'text' && styles.tabButtonActive]}
+              onPress={() => setViewMode('text')}
+            >
+              <Text style={[styles.tabText, viewMode === 'text' && styles.tabTextActive]}>
+                📝 Teleprompter
+              </Text>
+            </TouchableOpacity>
+           
+            <TouchableOpacity
+              style={[styles.tabButton, viewMode === 'document' && styles.tabButtonActive]}
+              onPress={() => setViewMode('document')}
+            >
+              <Text style={[styles.tabText, viewMode === 'document' && styles.tabTextActive]}>
+                📄 Archivo Original
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 
-        {request?.file_path && (
-          <TouchableOpacity style={styles.fileButton} onPress={openAttachedFile}>
-            <Text style={styles.fileButtonText}>📄 Abrir archivo adjunto para leer</Text>
-          </TouchableOpacity>
+        {/* 🌟 VISTA: TELEPROMPTER (Texto Plano) */}
+        {viewMode === 'text' && (
+          request?.description_or_text ? (
+            <ScrollView style={styles.textScroller} showsVerticalScrollIndicator={true}>
+              <Text style={styles.readingText}>{request.description_or_text}</Text>
+            </ScrollView>
+          ) : (
+            <View style={styles.noTextContainer}>
+              <Text style={styles.noText}>Este pedido no tiene texto tipeado.</Text>
+            </View>
+          )
+        )}
+
+        {/* 🌟 VISTA: DOCUMENTO (WebView Embutido) */}
+        {viewMode === 'document' && attachedFileUrl && (
+          <View style={styles.webviewContainer}>
+            <WebView
+              source={{ uri: attachedFileUrl }}
+              style={styles.webview}
+              startInLoadingState={true}
+              renderLoading={() => (
+                <ActivityIndicator color={Theme.colors.primary} style={styles.webviewLoader} />
+              )}
+              // Esto permite zoom y scroll libre en iOS y Android
+              scalesPageToFit={true}
+              bounces={false}
+              scrollEnabled={true}
+            />
+            {/* Botón de backup por si el navegador interno falla o prefiere leerlo aparte */}
+            <TouchableOpacity
+              style={styles.externalLinkButton}
+              onPress={() => Linking.openURL(attachedFileUrl)}
+            >
+              <Text style={styles.externalLinkText}>Abrir en navegador externo ↗</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
 
       {/* 2. MEDIDOR DE AUDIO */}
       <View style={styles.meterContainer}>
         <Text style={styles.meterLabel}>
-          {isRecording 
-            ? (isPaused ? 'Grabación en Pausa' : `Grabando: ${metering.toFixed(1)} dB`) 
+          {isRecording
+            ? (isPaused ? 'Grabación en Pausa' : `Grabando: ${metering.toFixed(1)} dB`)
             : 'Micrófono listo'}
         </Text>
         <View style={styles.meterBackground}>
@@ -281,7 +318,7 @@ export default function VolunteerDashboard({ navigation, route }: any) {
                   <Text style={styles.buttonText}>⏸️ Pausar</Text>
                 </TouchableOpacity>
               )}
-              
+             
               <TouchableOpacity style={[styles.halfButton, styles.stopButton]} onPress={stopRecording}>
                 <Text style={styles.buttonText}>✅ Terminar</Text>
               </TouchableOpacity>
@@ -296,23 +333,21 @@ export default function VolunteerDashboard({ navigation, route }: any) {
         {/* 4. CONTROLES DE SUBIDA */}
         {audioUri && !isRecording && (
           <View style={styles.resultContainer}>
-            <Text style={styles.successText}>✅ Audio listo para enviar</Text>
-            
-            {/* 🌟 NUEVO: Botón para escuchar la muestra */}
+            <Text style={styles.successText}><Ionicons name="checkmark-circle" size={20}/> Audio listo para enviar</Text>
+           
             <View style={styles.previewContainer}>
-              <TouchableOpacity 
-                style={[styles.previewButton, isPlayingPreview && styles.previewButtonActive]} 
+              <TouchableOpacity
+                style={[styles.previewButton, isPlayingPreview && styles.previewButtonActive]}
                 onPress={isPlayingPreview ? stopPreview : playPreview}
               >
                 <Text style={styles.previewButtonText}>
                   {isPlayingPreview ? '⏹️ Detener Muestra' : '🎧 Escuchar Grabación'}
                 </Text>
               </TouchableOpacity>
-              
-              {/* Mostramos los segundos si ya lo cargó */}
+             
               {previewDuration > 0 && !isPlayingPreview && (
                  <Text style={styles.previewDurationText}>
-                    Duración: {Math.floor(previewDuration / 1000)}s
+                   Duración: {Math.floor(previewDuration / 1000)}s
                  </Text>
               )}
             </View>
@@ -320,9 +355,9 @@ export default function VolunteerDashboard({ navigation, route }: any) {
             <TouchableOpacity style={[styles.button, styles.submitButton, isUploading && { opacity: 0.7 }]} onPress={uploadAudio} disabled={isUploading}>
               <Text style={styles.submitButtonText}>{isUploading ? 'Subiendo...' : 'Subir al Muro'}</Text>
             </TouchableOpacity>
-            
+           
             <TouchableOpacity style={styles.discardButton} onPress={discardAudio} disabled={isUploading}>
-              <Text style={styles.discardButtonText}>🗑️ Descartar y grabar de nuevo</Text>
+              <Text style={styles.discardButtonText}><Ionicons name="trash-bin" size={20}/> Descartar y grabar de nuevo</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -333,28 +368,42 @@ export default function VolunteerDashboard({ navigation, route }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: Theme.spacing.padding, backgroundColor: Theme.colors.background },
-  
-  // Estilos del Teleprompter
-  readingArea: { flex: 1, backgroundColor: Theme.colors.backgroundCard, padding: 16, borderRadius: Theme.spacing.borderRadiusCard, borderWidth: 1, borderColor: Theme.colors.border, marginBottom: 20 },
+ 
+  // Estilos del Área de Lectura
+  readingArea: { flex: 1, backgroundColor: Theme.colors.backgroundCard, padding: 16, borderRadius: Theme.spacing.borderRadiusCard, borderWidth: 1, borderColor: Theme.colors.border, marginBottom: 10 },
   title: { fontSize: Theme.text.fontSizeTitle, fontWeight: 'bold', color: Theme.colors.primary, marginBottom: 12, textAlign: 'center' },
+ 
+  // 🌟 ESTILOS DE PESTAÑAS (TABS)
+  tabsContainer: { flexDirection: 'row', backgroundColor: '#E0E7FF', borderRadius: 8, padding: 4, marginBottom: 12 },
+  tabButton: { flex: 1, paddingVertical: 8, borderRadius: 6, alignItems: 'center' },
+  tabButtonActive: { backgroundColor: '#FFF', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
+  tabText: { color: '#4F46E5', fontWeight: '500', fontSize: 14 },
+  tabTextActive: { fontWeight: 'bold' },
+
+  // Estilos Teleprompter (Text)
   textScroller: { flex: 1, backgroundColor: '#F1F3F5', padding: 12, borderRadius: 8 },
-  readingText: { fontSize: 18, color: Theme.colors.text, lineHeight: 28 }, // Letra grande para leer cómodo
+  readingText: { fontSize: 18, color: Theme.colors.text, lineHeight: 28 },
   noTextContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   noText: { color: Theme.colors.textMuted, fontStyle: 'italic' },
-  fileButton: { backgroundColor: Theme.colors.accent, padding: 12, borderRadius: 8, alignItems: 'center', marginTop: 12 },
-  fileButtonText: { color: '#FFF', fontWeight: 'bold' },
+ 
+  // 🌟 ESTILOS WEBVIEW (Document)
+  webviewContainer: { flex: 1, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: Theme.colors.border },
+  webview: { flex: 1, backgroundColor: '#F1F3F5' },
+  webviewLoader: { position: 'absolute', top: '50%', left: '50%', marginLeft: -18, marginTop: -18 },
+  externalLinkButton: { backgroundColor: '#F1F3F5', padding: 10, alignItems: 'center', borderTopWidth: 1, borderColor: Theme.colors.border },
+  externalLinkText: { color: Theme.colors.primary, fontSize: 12, fontWeight: 'bold' },
 
   // Medidor
   meterContainer: { width: '100%', alignItems: 'center', marginBottom: 20 },
   meterLabel: { fontSize: Theme.text.fontSizeBody, fontWeight: '600', marginBottom: 8, color: Theme.colors.text },
   meterBackground: { width: '100%', height: 12, backgroundColor: Theme.colors.border, borderRadius: 6, overflow: 'hidden' },
   meterFill: { height: '100%', borderRadius: 6 },
-  
+ 
   // Controles
   controls: { width: '100%', paddingBottom: 20 },
   button: { width: '100%', paddingVertical: 18, borderRadius: Theme.spacing.borderRadius, alignItems: 'center', elevation: 2 },
-  recordButton: { backgroundColor: Theme.colors.primary },
-  
+  recordButton: { backgroundColor: Theme.colors.primary, marginBottom: 5 },
+ 
   // Controles Activos (Pausa, Terminar, Cancelar)
   activeControlsGroup: { gap: 12 },
   rowButtons: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
@@ -364,12 +413,12 @@ const styles = StyleSheet.create({
   stopButton: { backgroundColor: Theme.colors.success },
   cancelButton: { paddingVertical: 16, alignItems: 'center' },
   cancelButtonText: { color: Theme.colors.danger, fontWeight: 'bold', fontSize: 16 },
-  
+ 
   // Subida
   submitButton: { backgroundColor: Theme.colors.success },
   buttonText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
   submitButtonText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
-  resultContainer: { width: '100%', alignItems: 'center', padding: 20, backgroundColor: Theme.colors.backgroundCard, borderRadius: Theme.spacing.borderRadiusCard, borderWidth: 1, borderColor: Theme.colors.success },
+  resultContainer: { width: '100%', alignItems: 'center', padding: 20, backgroundColor: Theme.colors.backgroundCard, borderRadius: Theme.spacing.borderRadiusCard, borderWidth: 1, borderColor: Theme.colors.success, elevation: 1, marginBottom: 5 },
   successText: { fontSize: Theme.text.fontSizeBody, fontWeight: 'bold', color: Theme.colors.success, marginBottom: 16 },
   discardButton: { marginTop: 16 },
   discardButtonText: { color: Theme.colors.danger, fontWeight: 'bold' },

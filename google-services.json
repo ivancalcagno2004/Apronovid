@@ -12,7 +12,20 @@
           "package_name": "com.apronovid.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "985023057997-ip2924meahoq6nvq2n6fekiur7ib7d8o.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.apronovid.app",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "985023057997-rh5r30seb1kl783ou3vvaa14l96dutmn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCtGzog5tFd_K3u1RJbCnI7cnA4DqqOeQQ"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "985023057997-rh5r30seb1kl783ou3vvaa14l96dutmn.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

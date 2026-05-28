@@ -1,0 +1,29 @@
+# Ignorar dependencias (EAS las descarga de nuevo en sus servidores)
+
+node_modules/
+
+# 🌟 Ignorar el peso muerto de las compilaciones locales de Android
+
+android/.gradle/
+android/build/
+android/app/build/
+android/app/.cxx/
+_.apk
+_.aab
+
+# Ignorar compilaciones de iOS
+
+ios/Pods/
+ios/build/
+
+# Ignorar audios pesados que hayas usado para probar la app localmente
+
+_.mp3
+_.wav
+_.m4a
+_.flac
+
+# Si por casualidad tenés la carpeta de Laravel adentro del mismo repositorio, ignorala:
+
+appronovid-backend/vendor/
+appronovid-backend/storage/
