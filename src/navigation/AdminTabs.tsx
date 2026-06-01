@@ -42,8 +42,8 @@ export default function AdminTabs() {
         headerShown: false,
       })}
     >
-      <Tab.Screen name="Catálogo" component={CatalogScreen} options={{ title: 'Catálogo' }} />
       <Tab.Screen name="Gestión" component={AdminDashboard} options={{ title: 'Gestión Catálogo' }} />
+      <Tab.Screen name="Catálogo" component={CatalogScreen} options={{ title: 'Catálogo' }} />
       <Tab.Screen name="Reportes" component={AdminFeedBackScreen} options={{ title: 'Reportes' }} />
       <Tab.Screen name="Revisión" component={AdminManualReview} options={{ title: 'Revisión' }} />
       <Tab.Screen name="Perfil" component={ProfileScreen} />

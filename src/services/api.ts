@@ -5,7 +5,7 @@ import * as SecureStore from 'expo-secure-store';
 // Si es el APK de EAS (__DEV__ es false), usa la IP de Azure.
 
 export const SERVER_URL = __DEV__ 
-  ? 'http://10.13.29.149:3333'  // <-- Tu backend local (verificá que siga siendo esta tu IP de Wi-Fi)
+  ? 'http://192.168.0.101:3333'  // <-- Tu backend local (verificá que siga siendo esta tu IP de Wi-Fi)
   : 'http://20.88.17.113';       // <-- Tu backend en Azure
 
 const api = axios.create({

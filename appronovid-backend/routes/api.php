@@ -46,6 +46,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/volunteers/{volunteerId}/rate', [RatingController::class, 'rateVolunteer']);
     Route::get('/volunteer/stats', [VolunteerRecordingController::class, 'getStats']);
     Route::get('/volunteer/{id}/public-stats', [VolunteerRecordingController::class, 'getPublicStats']);
+    Route::post('/reading-requests/{id}/report', [ReadingRequestController::class, 'report']);
 
     // --- AUDIOS Y GRABACIONES ---
     Route::post('/reading-requests/{id}/audio', [ReadingRequestController::class, 'uploadAudio']);
@@ -65,6 +66,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/manual-reviews', [\App\Http\Controllers\Admin\CatalogController::class, 'getManualReviews']);
         Route::post('/manual-reviews/{id}/approve', [\App\Http\Controllers\Admin\CatalogController::class, 'approveReview']);
         Route::post('/manual-reviews/{id}/reject', [\App\Http\Controllers\Admin\CatalogController::class, 'rejectReview']);
+        Route::post('/reported-requests/{id}/restore', [\App\Http\Controllers\FeedbackController::class, 'restoreReport']);
+        Route::delete('/reported-requests/{id}', [\App\Http\Controllers\FeedbackController::class, 'deleteReportedRequest']);
     });
 });
 // 🌟 RUTA DE AUDIO DEFINITIVA

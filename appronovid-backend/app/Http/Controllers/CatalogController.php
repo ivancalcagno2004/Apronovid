@@ -4,8 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Audiobook;
 use App\Models\ReadingRequest;
+use App\Models\Favorite;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB; // 🌟 IMPORTANTE: Agregamos la fachada DB
+use Illuminate\Support\Facades\DB;
 
 class CatalogController extends Controller
 {
@@ -14,23 +15,34 @@ class CatalogController extends Controller
         $search = $request->query('search');
         $categoryId = $request->query('category_id');
 
-        // 🌟 1. Obtenemos los favoritos Y LOS VOTOS del usuario actual
         $userId = $request->user()?->id;
         $userFavorites = [];
-        $userVotes = []; // <-- NUEVO
+        $userVotes = [];
 
         if ($userId) {
-            $userFavorites = DB::table('favorites')
-                ->where('user_id', $userId)
-                ->pluck('catalog_id')
-                ->toArray();
+            $favorites = Favorite::where('user_id', $userId)->get();
 
-            // <-- NUEVO: Buscamos qué audios ya votó
+            foreach ($favorites as $fav) {
+                if ($fav->favoritable_type === \App\Models\Audiobook::class) {
+                    $userFavorites[] = 'hist_' . $fav->favoritable_id;
+                } else {
+                    $userFavorites[] = 'req_' . $fav->favoritable_id;
+                }
+            }
+
+            // Buscamos qué audios ya votó el usuario (Devuelve ej: ['req_15', 'req_22'])
             $userVotes = DB::table('volunteer_ratings')
                 ->where('user_id', $userId)
                 ->pluck('audio_id')
                 ->toArray();
         }
+        // 1. Contar los "likes" de cada audio en los Pedidos Públicos
+        $likesCounts = DB::table('volunteer_ratings')
+            ->where('vote', 'like')
+            ->select('audio_id', DB::raw('count(*) as total'))
+            ->groupBy('audio_id')
+            ->pluck('total', 'audio_id')
+            ->toArray();
 
         // 2. Buscar en el Catálogo Histórico (Audiobooks)
         $audiobooksQuery = Audiobook::with('category');
@@ -47,21 +59,20 @@ class CatalogController extends Controller
             });
         }
 
-        // Mapeamos los resultados para que el frontend los entienda igual
         $audiobooks = $audiobooksQuery->get()->map(function ($book) {
             return [
-                'id' => 'hist_' . $book->id, // Le ponemos prefijo para que no choque con los IDs de pedidos
+                'id' => 'hist_' . $book->id,
                 'title' => $book->title,
                 'audio_path' => ltrim(str_replace(asset('storage/'), '', $book->audio_path), '/'),
                 'created_at' => $book->created_at,
                 'author' => $book->author,
                 'reader' => $book->reader,
                 'category_name' => $book->category ? $book->category->name : 'Sin categoría',
+                'likes_count' => null, // Los audiolibros históricos no tienen sistema de likes de voluntarios
             ];
         });
 
         // 3. Buscar en Pedidos Públicos de la Comunidad (ReadingRequests)
-        // 🌟 IMPORTANTE: Agregamos 'volunteer' al with() para traernos los datos del usuario que grabó
         $requestsQuery = ReadingRequest::with(['category', 'voluntario'])
             ->where('is_public', true)
             ->where('status', 'completed')
@@ -75,30 +86,34 @@ class CatalogController extends Controller
             $requestsQuery->where('title', 'like', "%{$search}%");
         }
 
-        $publicRequests = $requestsQuery->get()->map(function ($req) {
+        $publicRequests = $requestsQuery->get()->map(function ($req) use ($likesCounts) {
+            $compositeId = 'req_' . $req->id;
+
             return [
-                'id' => 'req_' . $req->id,
+                'id' => $compositeId,
                 'title' => $req->title,
                 'audio_path' => $req->audio_path,
                 'created_at' => $req->created_at,
                 'author' => null,
-
                 'reader' => $req->voluntario ? $req->voluntario->name : 'Voluntario Anónimo',
                 'reader_id' => $req->voluntario ? $req->voluntario->id : null,
                 'reader_stars' => $req->voluntario ? $req->voluntario->stars : null,
-
                 'category_name' => $req->category ? $req->category->name : 'Sin categoría',
+
+                'likes_count' => $likesCounts[$compositeId] ?? 0,
             ];
         });
 
-        // 4. Fusionar, ordenar y 🌟 AGREGAR EL ESTADO DE FAVORITOS 🌟
+        // 4. Fusionar y ordenar
         $catalog = $audiobooks->concat($publicRequests)
             ->sortByDesc('created_at')
             ->values()
             ->map(function ($item) use ($userFavorites, $userVotes) {
-                // Chequeamos si el ID (ej: 'hist_13') está en la lista de favoritos del usuario
                 $item['is_favorite'] = in_array($item['id'], $userFavorites);
+
+                // 🌟 Como tu DB ya guarda 'req_X', la comparación es directa
                 $item['has_voted'] = in_array($item['id'], $userVotes);
+
                 return $item;
             });
 

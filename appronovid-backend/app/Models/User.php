@@ -64,6 +64,6 @@ class User extends Authenticatable
 
     public function favorites()
     {
-        return $this->belongsToMany(ReadingRequest::class, 'favorites', 'user_id', 'reading_request_id')->withTimestamps();
+        return $this->hasMany(Favorite::class);
     }
 }

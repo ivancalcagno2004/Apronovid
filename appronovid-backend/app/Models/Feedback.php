@@ -9,10 +9,15 @@ class Feedback extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'type', 'message'];
+    protected $fillable = ['user_id', 'type', 'message', 'reading_request_id'];
 
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function request()
+    {
+        return $this->belongsTo(ReadingRequest::class, 'reading_request_id');
     }
 }

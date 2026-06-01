@@ -294,4 +294,73 @@ class ReadingRequestController extends Controller
             'data' => $catalog
         ]);
     }
+
+    public function report(Request $request, $id)
+    {
+        $request->validate([
+            'reason' => 'required|string|max:500'
+        ]);
+
+        $readingRequest = \App\Models\ReadingRequest::findOrFail($id);
+
+        if ($readingRequest->status !== 'pending') {
+            return response()->json(['message' => 'Solo se pueden reportar pedidos pendientes.'], 403);
+        }
+
+        // 🌟 NUEVO: Verificamos si este usuario ya reportó este pedido
+        $yaReporto = \App\Models\Feedback::where('reading_request_id', $id)
+            ->where('user_id', $request->user()->id)
+            ->where('type', 'report')
+            ->exists();
+
+        if ($yaReporto) {
+            return response()->json(['message' => 'Ya enviaste un reporte para este pedido. No podés reportarlo dos veces.'], 403);
+        }
+
+        // 2. Guardar el reporte
+        \App\Models\Feedback::create([
+            'user_id' => $request->user()->id,
+            'type' => 'report',
+            'message' => $request->input('reason'),
+            'reading_request_id' => $id
+        ]);
+
+        // 3. Contar y ocultar si llega a 5
+        $reportCount = \App\Models\Feedback::where('reading_request_id', $id)->count();
+
+        $fueOcultado = false;
+        if ($reportCount >= 5) {
+            $readingRequest->status = 'reported';
+            $readingRequest->save();
+            $fueOcultado = true;
+        }
+
+        // 4. Avisarle al Admin por Push
+        try {
+            $admins = \App\Models\User::where('role', 'admin')->whereNotNull('expo_push_token')->get();
+            $voluntario = $request->user()->name;
+
+            foreach ($admins as $admin) {
+                $bodyMsg = $fueOcultado
+                    ? "🚨 El pedido '{$readingRequest->title}' fue ocultado tras recibir 5 reportes."
+                    : "El voluntario {$voluntario} reportó un pedido. (Reporte {$reportCount}/5).";
+
+                \Illuminate\Support\Facades\Http::withoutVerifying()->post('https://exp.host/--/api/v2/push/send', [
+                    'to' => $admin->expo_push_token,
+                    'title' => '🚨 Pedido Reportado',
+                    'body' => $bodyMsg,
+                    'sound' => 'default',
+                ]);
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error push de reporte: ' . $e->getMessage());
+        }
+
+        // 5. Responder
+        if ($fueOcultado) {
+            return response()->json(['message' => 'Reporte enviado. El pedido fue ocultado temporalmente por acumulación de quejas.']);
+        }
+
+        return response()->json(['message' => "Reporte enviado ({$reportCount}/5). Gracias por ayudar a moderar."]);
+    }
 }

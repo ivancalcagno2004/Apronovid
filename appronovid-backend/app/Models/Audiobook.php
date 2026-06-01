@@ -13,4 +13,9 @@ class Audiobook extends Model
     {
         return $this->belongsTo(Category::class);
     }
+
+    public function favorites()
+    {
+        return $this->morphMany(Favorite::class, 'favoritable');
+    }
 }

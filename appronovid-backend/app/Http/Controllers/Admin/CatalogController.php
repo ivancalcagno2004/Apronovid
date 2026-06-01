@@ -60,10 +60,25 @@ class CatalogController extends Controller
         try {
             $interestedUsers = User::whereNotNull('expo_push_token')
                 ->where('role', 'oyente')
-                ->whereHas('favorites', function ($query) use ($audiobook) {
-                    $query->where('category_id', $audiobook->category_id);
-                })
-                ->get();
+                ->where(function ($query) use ($audiobook) {
+
+                    // Condición 1: Ha pedido audios de esta categoría
+                    $query->whereHas('readingRequests', function ($q) use ($audiobook) {
+                        $q->where('category_id', $audiobook->category_id);
+                    })
+
+                        // 🌟 Condición 2: Tiene favoritos (de CUALQUIER TIPO) de esta categoría
+                        ->orWhereHas('favorites', function ($q) use ($audiobook) {
+                            $q->whereHasMorph(
+                                'favoritable',
+                                [\App\Models\Audiobook::class, \App\Models\ReadingRequest::class],
+                                function ($qMorph) use ($audiobook) {
+                                    // Buscamos en la columna category_id del modelo final
+                                    $qMorph->where('category_id', $audiobook->category_id);
+                                }
+                            );
+                        });
+                })->get();
 
             $messages = [];
 

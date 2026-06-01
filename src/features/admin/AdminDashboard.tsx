@@ -62,9 +62,9 @@ export default function AdminDashboard() {
       
       try {
         await api.post('/user/push-token', { token: token }); 
-        console.log('Token del Oyente guardado en Laravel:', token);
+        console.log('Token del Admin guardado en Laravel:', token);
       } catch (error) {
-        console.error('Error enviando el token del Oyente:', error);
+        console.error('Error enviando el token del Admin:', error);
       }
     } else {
       console.log('Las Push Notifications necesitan un dispositivo físico para funcionar.');

@@ -24,6 +24,7 @@ interface CatalogItem {
   category_name?: string;
   is_favorite?: boolean;
   has_voted?: boolean;
+  likes_count?: number | null; // 🌟 NUEVO
 }
 
 interface Category {
@@ -61,13 +62,9 @@ export default function CatalogScreen() {
 
   useEffect(() => {
     if (route.params?.autoPlayId) {
-      // Limpiamos los filtros por si acaso el audio estaba oculto por otra categoría
       setSearch('');
       setSelectedCategory('all');
-      
-      // Establecemos este audio como el activo para que el reproductor lo despliegue
       setPlayingId(route.params.autoPlayId);
-
     }
   }, [route.params?.autoPlayId]);
 
@@ -113,7 +110,6 @@ export default function CatalogScreen() {
             position: 'bottom', 
             text2: item.is_favorite ? 'El audio fue removido de tus favoritos.' : 'El audio fue agregado a tus favoritos.' 
         });
-        fetchCatalog();
     } catch (error) {
         setItems((currentItems) => 
           currentItems.map((currentItem) => 
@@ -180,11 +176,23 @@ export default function CatalogScreen() {
       <View style={styles.cardHeader}>
         <View style={{ flex: 1, marginRight: 10 }}>
             <Text style={styles.cardTitle}>{item.title}</Text>
-            {item.category_name && (
-            <View style={styles.categoryBadge}>
-                <Text style={styles.categoryBadgeText}>{item.category_name}</Text>
+            
+            {/* 🌟 FILA DE ETIQUETAS (Categoría + Me Gusta de la comunidad) */}
+            <View style={styles.badgesRow}>
+              {item.category_name && (
+                <View style={styles.categoryBadge}>
+                    <Text style={styles.categoryBadgeText}>{item.category_name}</Text>
+                </View>
+              )}
+              
+              {/* Solo se muestra si tiene un conteo válido (oculto en audiolibros) */}
+              {item.likes_count !== null && item.likes_count !== undefined && (
+                <View style={styles.likesBadge} accessible={true} accessibilityLabel={`${item.likes_count} oyentes le dieron me gusta a esta grabación`}>
+                  <Ionicons name="thumbs-up" size={12} color={Theme.colors.primary} />
+                  <Text style={styles.likesText}>{item.likes_count}</Text>
+                </View>
+              )}
             </View>
-            )}
         </View>
 
         {user?.role === 'admin' && (
@@ -195,7 +203,7 @@ export default function CatalogScreen() {
 
         {user?.role === 'oyente' && (
           <TouchableOpacity onPress={() => toggleFavorite(item)} style={styles.favoriteButton} accessibilityRole="button" accessibilityLabel={item.is_favorite ? `Remover ${item.title} de favoritos` : `Agregar ${item.title} a favoritos`}>
-              <Ionicons name={item.is_favorite ? "heart" : "heart-outline"} size={22} color={item.is_favorite ? Theme.colors.danger : Theme.colors.textMuted} />
+              <Ionicons name={item.is_favorite ? "heart" : "heart-outline"} size={24} color={item.is_favorite ? Theme.colors.danger : Theme.colors.textMuted} />
           </TouchableOpacity>
         )}
       </View>
@@ -300,7 +308,7 @@ export default function CatalogScreen() {
         />
       )}
 
-      {/* 🌟 MODAL MODERNO CON 3 COLUMNAS */}
+      {/* MODAL DEL PERFIL PÚBLICO */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -398,9 +406,14 @@ const styles = StyleSheet.create({
   
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
   cardTitle: { fontSize: 18, fontWeight: 'bold', color: Theme.colors.text, marginBottom: 5 },
-  categoryBadge: { backgroundColor: '#E3F2FD', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start' },
-  categoryBadgeText: { color: '#0D6EFD', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' },
   
+  // 🌟 ESTILOS DE ETIQUETAS Y LIKES
+  badgesRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  categoryBadge: { backgroundColor: '#E3F2FD', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  categoryBadgeText: { color: '#0D6EFD', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' },
+  likesBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E0E7FF', paddingHorizontal: 6, paddingVertical: 4, borderRadius: 12, marginLeft: 8 },
+  likesText: { fontSize: 11, fontWeight: 'bold', color: Theme.colors.primary, marginLeft: 4 },
+
   deleteButton: { padding: 8, backgroundColor: '#FFEBEE', borderRadius: 8 },
   metaText: { fontSize: 14, color: '#555', marginBottom: 4, fontWeight: '500' },
   volunteerName: { fontSize: 14, color: '#555', marginBottom: 4, fontWeight: '500' },
@@ -408,9 +421,9 @@ const styles = StyleSheet.create({
   playerContainer: { marginTop: 10 },
   emptyState: { alignItems: 'center', justifyContent: 'center', marginTop: 60, paddingHorizontal: 30 },
   emptyText: { fontSize: 16, color: Theme.colors.textMuted, textAlign: 'center', marginTop: 15 },
-  favoriteButton: { padding: 8, marginLeft: 10, backgroundColor: '#FFEDED', borderRadius: 8 },
+  favoriteButton: { padding: 8, marginLeft: 10, backgroundColor: '#FFF0F5', borderRadius: 8 },
 
-  // 🌟 MODAL (Ajustado para 3 columnas)
+  // MODAL
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent: { width: '100%', backgroundColor: Theme.colors.backgroundCard, borderRadius: 20, padding: 24, elevation: 10 },
   modalHeader: { alignItems: 'center', marginBottom: 20 },

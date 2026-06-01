@@ -3,10 +3,8 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use App\Models\ReadingRequest;
-use App\Models\Audiobook;
-use App\Models\User; // 🌟 IMPORTANTE: Agregamos el modelo User
+use App\Models\Favorite;
+use App\Models\User;
 
 class FavoriteController extends Controller
 {
@@ -14,79 +12,78 @@ class FavoriteController extends Controller
     {
         $userId = $request->user()->id;
 
-        $catalogIds = DB::table('favorites')
+        // 🌟 MAGIA ELOQUENT: Traemos todos los favoritos del usuario con sus modelos y categorías en 1 sola consulta
+        $favorites = Favorite::with('favoritable.category')
             ->where('user_id', $userId)
-            ->pluck('catalog_id');
+            ->orderBy('created_at', 'desc')
+            ->get();
 
-        $histIds = [];
-        $reqIds = [];
+        $results = $favorites->map(function ($fav) {
+            // "favoritable" puede ser un Audiobook o un ReadingRequest automáticamente
+            $item = $fav->favoritable;
 
-        foreach ($catalogIds as $id) {
-            if (str_starts_with($id, 'hist_')) {
-                $histIds[] = str_replace('hist_', '', $id);
+            // Si por alguna razón el audio original fue borrado por un admin, lo ignoramos
+            if (!$item) return null;
+
+            if ($fav->favoritable_type === \App\Models\Audiobook::class) {
+                return [
+                    'id' => 'hist_' . $item->id,
+                    'title' => $item->title,
+                    'audio_path' => ltrim(str_replace(asset('storage/'), '', $item->audio_path), '/'),
+                    'created_at' => $fav->created_at, // Mostramos la fecha en que lo guardó en favoritos
+                    'author' => $item->author,
+                    'reader' => $item->reader,
+                    'category_name' => $item->category ? $item->category->name : 'Sin categoría',
+                ];
             } else {
-                $reqIds[] = str_replace('req_', '', $id);
+                $voluntario = $item->voluntario_id ? User::find($item->voluntario_id) : null;
+
+                return [
+                    'id' => 'req_' . $item->id,
+                    'title' => $item->title,
+                    'audio_path' => $item->audio_path,
+                    'created_at' => $fav->created_at,
+                    'author' => 'Pedido de Oyente',
+                    'reader' => $voluntario ? $voluntario->name : null,
+                    'reader_id' => $item->voluntario_id,
+                    'reader_stars' => $voluntario ? $voluntario->stars : null,
+                    'category_name' => $item->category ? $item->category->name : 'Sin categoría',
+                ];
             }
-        }
+        })->filter()->values(); // Filtramos los nulos (si los hay) y reindexamos
 
-        $historical = Audiobook::with('category')->whereIn('id', $histIds)->get()->map(function ($item) {
-            return [
-                'id' => 'hist_' . $item->id,
-                'title' => $item->title,
-                'audio_path' => ltrim(str_replace(asset('storage/'), '', $item->audio_path), '/'),
-                'created_at' => $item->created_at,
-                'author' => $item->author,
-                'reader' => $item->reader,
-                'category_name' => $item->category ? $item->category->name : 'Sin categoría',
-            ];
-        });
-
-        $requests = ReadingRequest::with('category')->whereIn('id', $reqIds)->get()->map(function ($item) {
-            // 🌟 Buscamos al voluntario en la base de datos
-            $voluntario = $item->voluntario_id ? User::find($item->voluntario_id) : null;
-
-            return [
-                'id' => 'req_' . $item->id,
-                'title' => $item->title,
-                'audio_path' => $item->audio_path,
-                'created_at' => $item->created_at,
-                'author' => 'Pedido de Oyente',
-
-                // 🌟 AHORA SÍ MANDAMOS LOS DATOS DEL NARRADOR
-                'reader' => $voluntario ? $voluntario->name : null,
-                'reader_id' => $item->voluntario_id,
-                'reader_stars' => $voluntario ? $voluntario->stars : null,
-
-                'category_name' => $item->category ? $item->category->name : 'Sin categoría',
-            ];
-        });
-
-        return response()->json($historical->concat($requests));
+        return response()->json($results);
     }
 
     public function toggle(Request $request, $id)
     {
         $userId = $request->user()->id;
 
-        $exists = DB::table('favorites')
-            ->where('user_id', $userId)
-            ->where('catalog_id', $id)
-            ->first();
-
-        if ($exists) {
-            DB::table('favorites')
-                ->where('user_id', $userId)
-                ->where('catalog_id', $id)
-                ->delete();
+        // 🌟 Desciframos el ID que manda React Native ('hist_x' o 'req_x') y le asignamos su clase real
+        if (str_starts_with($id, 'hist_')) {
+            $realId = str_replace('hist_', '', $id);
+            $modelClass = \App\Models\Audiobook::class;
         } else {
-            DB::table('favorites')->insert([
-                'user_id' => $userId,
-                'catalog_id' => $id,
-                'created_at' => now(),
-                'updated_at' => now()
-            ]);
+            $realId = str_replace('req_', '', $id);
+            $modelClass = \App\Models\ReadingRequest::class;
         }
 
-        return response()->json(['message' => 'Favoritos actualizados']);
+        // Buscamos si ya existe usando el Polimorfismo
+        $favorite = Favorite::where('user_id', $userId)
+            ->where('favoritable_id', $realId)
+            ->where('favoritable_type', $modelClass)
+            ->first();
+
+        if ($favorite) {
+            $favorite->delete();
+            return response()->json(['message' => 'Eliminado de favoritos']);
+        } else {
+            Favorite::create([
+                'user_id' => $userId,
+                'favoritable_id' => $realId,
+                'favoritable_type' => $modelClass,
+            ]);
+            return response()->json(['message' => 'Agregado a favoritos']);
+        }
     }
 }
