@@ -1,11 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, Image, TouchableOpacity } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
-import { Theme } from '../../styles/theme';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
-import { useFocusEffect } from '@react-navigation/native';
+import { useIsFocused } from '@react-navigation/native';
+import { cn } from '../../lib/utils';
+
+// 🌟 Componentes RNR Base
+import ScreenWrapper from '../../components/ScreenWrapper';
+import { Text } from '../../components/ui/text';
+import { Input } from '../../components/ui/input';
+import { Button } from '../../components/ui/button';
+
+// 🌟 Importamos los Tabs de RNR
+import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 
 const logoMedalla = require('../../../assets/favicon.png');
 
@@ -38,51 +47,54 @@ export default function ProfileScreen({ navigation }: any) {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const [feedbackType, setFeedbackType] = useState<'bug' | 'suggestion'>('bug');
+  const [feedbackType, setFeedbackType] = useState('bug'); // Ahora manejado por Tabs
   const [feedbackMessage, setFeedbackMessage] = useState('');
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
 
   const [statsData, setStatsData] = useState<VolunteerStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
 
+  // 🌟 SOLUCIÓN DEFINITIVA: useIsFocused no pierde el contexto al recargar o cambiar estados
+  const isFocused = useIsFocused();
+
   let displayRole = user?.role === 'oyente' ? 'Oyente' : 'Narrador Voluntario';
   if (user?.role === 'admin') {
     displayRole = 'Administrador';
   }
 
-  useFocusEffect(
-    useCallback(() => {
-      if (user?.role === 'narrador') {
-      const fetchStats = async () => {
-        try {
-          setIsLoadingStats(true);
-          const response = await api.get('/volunteer/stats');
-          setStatsData(response.data);
-        } catch (error) {
-          console.error('Error fetching stats:', error);
-        } finally {
-          setIsLoadingStats(false);
-        }
-      };
+  useEffect(() => {
+    const fetchStats = async () => {
+      if (user?.role !== 'narrador') return;
+      try {
+        setIsLoadingStats(true);
+        const response = await api.get('/volunteer/stats');
+        setStatsData(response.data);
+      } catch (error) {
+        console.error('Error fetching stats:', error);
+      } finally {
+        setIsLoadingStats(false);
+      }
+    };
+
+    if (isFocused) {
       fetchStats();
     }
-    }, [user])
-  );
+  }, [isFocused, user?.role]);
 
   const handleUpdatePassword = async () => {
     if (!currentPassword || !newPassword) {
-      Toast.show({ type: 'error', text1: 'Error', text2: 'Completá ambas contraseñas.', position: 'bottom' });
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Completá ambas contraseñas.' });
       return;
     }
     try {
       setIsLoading(true);
       await api.put('/profile/password', { current_password: currentPassword, new_password: newPassword });
-      Toast.show({ type: 'success', text1: 'Éxito', text2: 'Contraseña actualizada correctamente.', position: 'bottom' });
+      Toast.show({ type: 'success', text1: 'Éxito', text2: 'Contraseña actualizada correctamente.' });
       setIsEditingPassword(false);
       setCurrentPassword('');
       setNewPassword('');
     } catch (error: any) {
-      Toast.show({ type: 'error', text1: 'Error', text2: error.response?.data?.message || 'No se pudo actualizar la contraseña.', position: 'bottom' });
+      Toast.show({ type: 'error', text1: 'Error', text2: error.response?.data?.message || 'No se pudo actualizar la contraseña.' });
     } finally {
       setIsLoading(false);
     }
@@ -96,8 +108,7 @@ export default function ProfileScreen({ navigation }: any) {
         type: 'error', 
         text1: 'Atención', 
         text2: 'Por favor, escribí un mensaje con al menos 3 palabras para darnos más detalle.', 
-        position: 'bottom',
-        visibilityTime: 7000
+        visibilityTime: 6000
       });
       return;
     }
@@ -105,10 +116,10 @@ export default function ProfileScreen({ navigation }: any) {
     try {
       setIsSubmittingFeedback(true);
       await api.post('/feedback', { type: feedbackType, message: feedbackMessage });
-      Toast.show({ type: 'success', text1: '¡Gracias!', text2: 'Tu mensaje fue enviado con éxito.', position: 'bottom', visibilityTime: 7000 });
+      Toast.show({ type: 'success', text1: '¡Gracias!', text2: 'Tu mensaje fue enviado con éxito.', visibilityTime: 5000 });
       setFeedbackMessage('');
     } catch (error) {
-      Toast.show({ type: 'error', text1: 'Error', text2: 'No se pudo enviar el mensaje. Intentá de nuevo.', position: 'bottom', visibilityTime: 7000  });
+      Toast.show({ type: 'error', text1: 'Error', text2: 'No se pudo enviar el mensaje. Intentá de nuevo.', visibilityTime: 5000 });
     } finally {
       setIsSubmittingFeedback(false);
     }
@@ -117,284 +128,238 @@ export default function ProfileScreen({ navigation }: any) {
   const handleLogout = async () => {
     setIsLoading(true);
     await logout();
-    Toast.show({ type: 'success', text1: 'Sesión Cerrada', text2: 'Cerraste sesión correctamente.', position: 'bottom' });
+    Toast.show({ type: 'success', text1: 'Sesión Cerrada', text2: 'Cerraste sesión correctamente.' });
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        
-        <View style={styles.header}>
-          <View style={styles.headerBrand}>
-            <Image source={logoMedalla} style={styles.headerLogo} />
-            <Text style={styles.title} accessibilityRole="header">Mi Perfil</Text>
-          </View>
-        </View>
+    <ScreenWrapper withBottomInsets={false}>
+      
+      {/* HEADER FIJO */}
+      <View className="px-6 pt-4 pb-4 border-b border-border bg-background/90 z-10">
+        <View className="flex-row items-center">
+            <Image source={logoMedalla} className="w-9 h-9 mr-3 rounded-lg shadow-sm" importantForAccessibility="no" />
+            <Text className="text-3xl font-extrabold tracking-tight text-foreground" accessibilityRole="header">Mi Perfil</Text>
+        </View>   
+      </View>
 
-        {/* 🌟 SECCIÓN: PERFIL DEL USUARIO (Rediseñada) */}
-        <View 
-          style={styles.profileCard} 
-          accessible={true} 
-          accessibilityLabel={`Perfil de ${user?.name}. Correo electrónico: ${user?.email}. Tipo de cuenta: ${displayRole}.`}
-        >
-          <View style={styles.avatarContainer}>
-            <Ionicons name="person" size={36} color="#FFF" />
-          </View>
-          <Text style={styles.profileName}>{user?.name}</Text>
-          <Text style={styles.profileEmail}>{user?.email}</Text>
-          <View style={styles.roleBadge}>
-            <Text style={styles.roleBadgeText}>{displayRole}</Text>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Contraseña</Text>
-          {!isEditingPassword ? (
-            <TouchableOpacity onPress={() => setIsEditingPassword(true)} accessibilityLabel="Cambiar contraseña">
-              <Text style={styles.actionText}>Cambiar mi contraseña</Text>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1">
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingVertical: 24, paddingBottom: 60 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          
+          {/* TARJETA DE USUARIO ÉPICA */}
+          <View 
+            className="bg-card p-8 rounded-[36px] border border-border/60 mb-6 items-center shadow-lg shadow-black/5 relative"
+            accessible={true} 
+            accessibilityLabel={`Perfil de ${user?.name}. Correo electrónico: ${user?.email}. Tipo de cuenta: ${displayRole}.`}
+          >
+            {/* BOTÓN DE CERRAR SESIÓN ARRIBA A LA DERECHA */}
+            <TouchableOpacity 
+              onPress={handleLogout}
+              className="absolute top-5 right-5 w-12 h-12 bg-red-50 rounded-full items-center justify-center border border-red-100 shadow-sm z-20"
+              accessibilityLabel="Cerrar sesión"
+              accessibilityRole="button"
+            >
+              <Ionicons name="log-out" size={22} color="#DC2626" style={{ marginLeft: 3 }} />
             </TouchableOpacity>
-          ) : (
-            <View>
-              <View style={styles.passwordContainer}>
-                <TextInput 
-                  style={styles.inputWithIcon} 
-                  placeholder="Contraseña actual" 
-                  placeholderTextColor={Theme.colors.textMuted}
-                  secureTextEntry={!showCurrentPassword} 
-                  value={currentPassword} 
-                  onChangeText={setCurrentPassword} 
-                />
-                <TouchableOpacity style={styles.eyeButton} onPress={() => setShowCurrentPassword(!showCurrentPassword)}>
-                  <Ionicons name={showCurrentPassword ? "eye-off" : "eye"} size={24} color={Theme.colors.textMuted} />
-                </TouchableOpacity>
-              </View>
 
-              <View style={styles.passwordContainer}>
-                <TextInput 
-                  style={styles.inputWithIcon} 
-                  placeholder="Nueva contraseña" 
-                  placeholderTextColor={Theme.colors.textMuted}
-                  secureTextEntry={!showNewPassword} 
-                  value={newPassword} 
-                  onChangeText={setNewPassword} 
-                />
-                <TouchableOpacity style={styles.eyeButton} onPress={() => setShowNewPassword(!showNewPassword)}>
-                  <Ionicons name={showNewPassword ? "eye-off" : "eye"} size={24} color={Theme.colors.textMuted} />
-                </TouchableOpacity>
-              </View>
-              <View style={styles.buttonRow}>
-                <TouchableOpacity onPress={() => setIsEditingPassword(false)} style={styles.cancelBtn}><Text style={styles.cancelText}>Cancelar</Text></TouchableOpacity>
-                <TouchableOpacity onPress={handleUpdatePassword} style={styles.saveBtn} disabled={isLoading}>
-                  {isLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveText}>Actualizar</Text>}
-                </TouchableOpacity>
-              </View>
+            <View className="w-24 h-24 bg-primary/5 rounded-full items-center justify-center mb-5 border-[6px] border-primary/10 shadow-sm mt-2">
+              <Ionicons name="person" size={40} color="#0F172A" />
             </View>
-          )}
-        </View>
-
-        {/* 🌟 SECCIÓN: DONACIONES (Banner destacado) */}
-        <TouchableOpacity 
-          style={styles.donationCard} 
-          onPress={() => navigation.navigate('Donation')}
-          accessibilityRole="button"
-          accessibilityLabel="Ir a la sección de donaciones para apoyar la aplicación"
-        >
-          <View style={styles.donationIconContainer}>
-            <Ionicons name="heart" size={28} color="#FFF" />
+            <Text className="text-3xl font-black text-foreground mb-1 text-center tracking-tight">{user?.name}</Text>
+            <Text className="text-sm font-medium text-muted-foreground mb-5 text-center">{user?.email}</Text>
+            <View className="bg-indigo-50 border border-indigo-200 px-5 py-2 rounded-full shadow-sm">
+              <Text className="text-indigo-700 font-bold text-xs uppercase tracking-widest">{displayRole}</Text>
+            </View>
           </View>
-          <View style={styles.donationTextContainer}>
-            <Text style={styles.donationTitle}>Apoyá el proyecto</Text>
-            <Text style={styles.donationDesc}>Ayudanos a mantener y mejorar esta app para toda la comunidad.</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={24} color={Theme.colors.primary} />
-        </TouchableOpacity>
 
-        {/* SECCIÓN: ESTADÍSTICAS */}
-        {user?.role === 'narrador' && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle} accessibilityRole="header">Rendimiento y Logros</Text>
-            
-            {isLoadingStats ? (
-              <ActivityIndicator color={Theme.colors.primary} style={{ marginVertical: 20 }} />
-            ) : statsData ? (
-              <>
-                <View style={styles.statsRow}>
-                  <View 
-                    style={styles.statBox} 
-                    accessible={true} 
-                    accessibilityLabel={`Has publicado ${statsData.stats.public_audios} audios públicos.`}
-                  >
-                    <Text style={styles.statNumber}>{statsData.stats.public_audios}</Text>
-                    <Text style={styles.statLabel}>Públicos</Text>
-                  </View>
+          {/* BANNER DE DONACIONES */}
+          <TouchableOpacity 
+            className="flex-row items-center bg-rose-50 p-5 rounded-[28px] border border-rose-200 mb-6 shadow-sm"
+            onPress={() => navigation.navigate('Donation')}
+            accessibilityRole="button"
+            accessibilityLabel="Ir a la sección de donaciones para apoyar la aplicación"
+          >
+            <View className="w-14 h-14 rounded-full bg-rose-100 justify-center items-center mr-4 border border-rose-200 shadow-sm">
+              <Ionicons name="heart" size={28} color="#E11D48" style={{ marginTop: 2 }} />
+            </View>
+            <View className="flex-1">
+              <Text className="text-lg font-extrabold text-rose-900 mb-1">Apoyá el proyecto</Text>
+              <Text className="text-sm text-rose-700/80 font-medium leading-tight">Ayudanos a mantener y mejorar esta app para toda la comunidad.</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={24} color="#BE123C" />
+          </TouchableOpacity>
 
-                  <View 
-                    style={styles.statBox} 
-                    accessible={true} 
-                    accessibilityLabel={`Tienes ${statsData.stats.private_audios} audios que fueron aprobados pero marcados como privados.`}
-                  >
-                    <Text style={styles.statNumber}>{statsData.stats.private_audios}</Text>
-                    <Text style={styles.statLabel}>Privados</Text>
-                  </View>
+          {/* SECCIÓN: CONTRASEÑA */}
+          <View className="bg-card p-6 rounded-[32px] border border-border/60 mb-6 shadow-lg shadow-black/5">
+            <View className="flex-row items-center mb-4">
+              <View className="bg-secondary p-2 rounded-full mr-3">
+                <Ionicons name="lock-closed" size={20} color="#0F172A" />
+              </View>
+              <Text className="text-xl font-extrabold text-foreground" accessibilityRole="header">Seguridad</Text>
+            </View>
 
-                  <View 
-                    style={styles.statBox} 
-                    accessible={true} 
-                    accessibilityLabel={statsData.stats.stars ? `Tu calificación actual es de ${statsData.stats.stars} estrellas de 5.` : 'Aún no tenés suficientes valoraciones.'}
-                  >
-                    <Text style={styles.statNumber}>
-                      {statsData.stats.stars ? `${statsData.stats.stars}` : '--'}
-                      {statsData.stats.stars && <Ionicons name="star" size={14} color="#FFD700" style={{ marginLeft: 2 }} />}
-                    </Text>
-                    <Text style={styles.statLabel}>Estrellas</Text>
-                  </View>
+            {!isEditingPassword ? (
+              <Button variant="secondary" size="lg" className="rounded-2xl" onPress={() => setIsEditingPassword(true)}>
+                <Text className="font-bold text-foreground">Cambiar mi contraseña</Text>
+              </Button>
+            ) : (
+              <View className="gap-3">
+                <View className="relative justify-center">
+                  <Input 
+                    className="h-14 rounded-2xl px-4 bg-secondary/30 border-transparent focus:border-primary pr-12"
+                    placeholder="Contraseña actual" 
+                    secureTextEntry={!showCurrentPassword} 
+                    value={currentPassword} 
+                    onChangeText={setCurrentPassword} 
+                  />
+                  <TouchableOpacity className="absolute right-4 z-10" onPress={() => setShowCurrentPassword(!showCurrentPassword)}>
+                    <Ionicons name={showCurrentPassword ? "eye-off" : "eye"} size={22} color="#64748B" />
+                  </TouchableOpacity>
                 </View>
 
-                <Text style={styles.badgesHeader} accessibilityRole="header">Medallas Obtenidas</Text>
-                {statsData.badges.length === 0 ? (
-                  <Text style={styles.emptyText} accessible={true}>Aún no tenés logros. ¡Seguí grabando para desbloquear medallas!</Text>
-                ) : (
-                  <View style={styles.badgesContainer}>
-                    {statsData.badges.map((badge) => (
-                      <View 
-                        key={badge.id} 
-                        style={styles.badgeCard}
-                        accessible={true}
-                        accessibilityLabel={`Medalla: ${badge.title}. ${badge.desc}`}
-                      >
-                        <View style={[styles.iconCircle, { backgroundColor: `${badge.color}15` }]}>
-                          <Ionicons name={badge.icon} size={28} color={badge.color} />
-                        </View>
-                        <View style={styles.badgeTextContainer}>
-                          <Text style={styles.badgeTitle}>{badge.title}</Text>
-                          <Text style={styles.badgeDesc}>{badge.desc}</Text>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </>
-            ) : (
-              <Text style={styles.emptyText}>No se pudieron cargar las estadísticas.</Text>
+                <View className="relative justify-center">
+                  <Input 
+                    className="h-14 rounded-2xl px-4 bg-secondary/30 border-transparent focus:border-primary pr-12"
+                    placeholder="Nueva contraseña" 
+                    secureTextEntry={!showNewPassword} 
+                    value={newPassword} 
+                    onChangeText={setNewPassword} 
+                  />
+                  <TouchableOpacity className="absolute right-4 z-10" onPress={() => setShowNewPassword(!showNewPassword)}>
+                    <Ionicons name={showNewPassword ? "eye-off" : "eye"} size={22} color="#64748B" />
+                  </TouchableOpacity>
+                </View>
+                
+                <View className="flex-row justify-end gap-2 mt-2">
+                  <Button variant="ghost" size="default" onPress={() => setIsEditingPassword(false)}>
+                    <Text className="font-bold text-muted-foreground">Cancelar</Text>
+                  </Button>
+                  <Button size="default" onPress={handleUpdatePassword} disabled={isLoading}>
+                    {isLoading ? <ActivityIndicator color="#FFF" /> : <Text className="font-bold text-primary-foreground">Actualizar</Text>}
+                  </Button>
+                </View>
+              </View>
             )}
           </View>
-        )}
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle} accessibilityRole="header">Sugerencias y Reportes</Text>
-          <Text style={styles.sectionSubtitle}>¿Encontraste un error o tenés una idea para mejorar la app? ¡Escribinos!</Text>
-          
-          <View style={styles.feedbackTypeContainer}>
-            <TouchableOpacity 
-              style={[styles.feedbackTypeBtn, feedbackType === 'bug' && styles.feedbackTypeBtnActive]}
-              onPress={() => setFeedbackType('bug')}
-            >
-              <Ionicons name="bug-outline" size={18} color={feedbackType === 'bug' ? '#FFF' : Theme.colors.textMuted} />
-              <Text style={[styles.feedbackTypeText, feedbackType === 'bug' && styles.feedbackTypeTextActive]}>Error</Text>
-            </TouchableOpacity>
+          {/* SECCIÓN: ESTADÍSTICAS DEL NARRADOR */}
+          {user?.role === 'narrador' && (
+            <View className="bg-card p-6 rounded-[32px] border border-border/60 mb-6 shadow-lg shadow-black/5">
+              <View className="flex-row items-center mb-5">
+                <View className="bg-secondary p-2 rounded-full mr-3">
+                  <Ionicons name="bar-chart" size={20} color="#0F172A" />
+                </View>
+                <Text className="text-xl font-extrabold text-foreground" accessibilityRole="header">Rendimiento</Text>
+              </View>
+              
+              {isLoadingStats ? (
+                <ActivityIndicator color="#0F172A" className="my-6" />
+              ) : statsData ? (
+                <>
+                  <View className="flex-row justify-between mb-6 gap-2">
+                    <View className="flex-1 bg-secondary/40 py-4 rounded-[20px] items-center border border-border/50">
+                      <Text className="text-2xl font-black text-foreground">{statsData.stats.public_audios}</Text>
+                      <Text className="text-[10px] text-muted-foreground mt-1 font-bold uppercase tracking-wider">Públicos</Text>
+                    </View>
+                    <View className="flex-1 bg-secondary/40 py-4 rounded-[20px] items-center border border-border/50">
+                      <Text className="text-2xl font-black text-foreground">{statsData.stats.private_audios}</Text>
+                      <Text className="text-[10px] text-muted-foreground mt-1 font-bold uppercase tracking-wider">Privados</Text>
+                    </View>
+                    <View className="flex-1 bg-amber-50/50 py-4 rounded-[20px] items-center border border-amber-200/50">
+                      <View className="flex-row items-center">
+                        <Text className="text-2xl font-black text-amber-600">
+                          {statsData.stats.stars ? statsData.stats.stars : '--'}
+                        </Text>
+                        {statsData.stats.stars && <Ionicons name="star" size={14} color="#D97706" style={{ marginLeft: 2, marginTop: -2 }} />}
+                      </View>
+                      <Text className="text-[10px] text-amber-700 mt-1 font-bold uppercase tracking-wider">Estrellas</Text>
+                    </View>
+                  </View>
 
-            <TouchableOpacity 
-              style={[styles.feedbackTypeBtn, feedbackType === 'suggestion' && styles.feedbackTypeBtnActive]}
-              onPress={() => setFeedbackType('suggestion')}
+                  <Text className="text-sm font-extrabold text-neutral-400 uppercase tracking-widest mb-4 ml-1">Medallas Obtenidas</Text>
+                  {statsData.badges.length === 0 ? (
+                    <View className="bg-secondary/30 p-5 rounded-2xl items-center border border-border/50 mb-2">
+                      <Ionicons name="lock-closed-outline" size={24} color="#94A3B8" className="mb-2" />
+                      <Text className="text-sm text-neutral-500 font-medium text-center">
+                        Aún no tenés logros. ¡Seguí grabando para desbloquear medallas!
+                      </Text>
+                    </View>
+                  ) : (
+                    <View className="gap-3 mt-1">
+                      {statsData.badges.map((badge) => (
+                        <View 
+                          key={badge.id} 
+                          className="flex-row bg-background p-4 rounded-2xl items-center border border-border/80 shadow-sm"
+                        >
+                          <View className="w-12 h-12 rounded-full justify-center items-center mr-4 shadow-sm border border-black/5" style={{ backgroundColor: `${badge.color}15` }}>
+                            <Ionicons name={badge.icon} size={24} color={badge.color} />
+                          </View>
+                          <View className="flex-1">
+                            <Text className="text-base font-bold text-foreground">{badge.title}</Text>
+                            <Text className="text-xs text-muted-foreground mt-0.5 font-medium">{badge.desc}</Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </>
+              ) : (
+                <Text className="text-sm text-muted-foreground italic text-center mt-2">No se pudieron cargar las estadísticas.</Text>
+              )}
+            </View>
+          )}
+
+          {/* 🌟 SECCIÓN: FEEDBACK (Ahora usando Tabs de RNR) */}
+          <View className="bg-card p-6 rounded-[32px] border border-border/60 mb-8 shadow-lg shadow-black/5">
+            <View className="flex-row items-center mb-3">
+              <View className="bg-secondary p-2 rounded-full mr-3">
+                <Ionicons name="chatbubbles" size={20} color="#0F172A" />
+              </View>
+              <Text className="text-xl font-extrabold text-foreground" accessibilityRole="header">Sugerencias y Reportes</Text>
+            </View>
+            <Text className="text-sm text-muted-foreground mb-5 font-medium leading-relaxed">¿Encontraste un error o tenés una idea para mejorar la app? ¡Escribinos!</Text>
+            
+            {/* 🌟 TABS OFICIALES DE RNR */}
+            <Tabs
+              value={feedbackType}
+              onValueChange={setFeedbackType}
+              className="w-full flex-col mb-4"
             >
-              <Ionicons name="bulb-outline" size={18} color={feedbackType === 'suggestion' ? '#FFF' : Theme.colors.textMuted} />
-              <Text style={[styles.feedbackTypeText, feedbackType === 'suggestion' && styles.feedbackTypeTextActive]}>Sugerencia</Text>
-            </TouchableOpacity>
+              <TabsList className="flex-row w-full bg-secondary/80 rounded-2xl p-1 h-14">
+                <TabsTrigger value="bug" className="flex-1 flex-row items-center justify-center gap-2 rounded-xl">
+                  <Ionicons name="bug" size={16} color={feedbackType === 'bug' ? '#D90606' : '#64748B'} />
+                  <Text className={cn("font-bold", feedbackType === 'bug' ? "text-red-700" : "text-muted-foreground")}>Error</Text>
+                </TabsTrigger>
+                <TabsTrigger value="suggestion" className="flex-1 flex-row items-center justify-center gap-2 rounded-xl">
+                  <Ionicons name="bulb" size={16} color={feedbackType === 'suggestion' ? '#D97706' : '#64748B'} />
+                  <Text className={cn("font-bold", feedbackType === 'suggestion' ? "text-amber-700" : "text-muted-foreground")}>Idea</Text>
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            <Input
+              className="rounded-2xl px-4 pt-4 pb-4 bg-secondary/30 border-transparent focus:border-primary text-base mt-2"
+              style={{ height: 120 }}
+              placeholder={feedbackType === 'bug' ? "Describí el problema detalladamente..." : "Contanos tu idea para mejorar la app..."}
+              multiline={true}
+              numberOfLines={4}
+              value={feedbackMessage}
+              onChangeText={setFeedbackMessage}
+              textAlignVertical="top"
+            />
+
+            <Button size="lg" className="rounded-2xl mt-4 h-14" onPress={handleSubmitFeedback} disabled={isSubmittingFeedback}>
+              {isSubmittingFeedback ? <ActivityIndicator color="#FFF" /> : <Text className="text-primary-foreground font-extrabold text-base tracking-wide">Enviar Mensaje</Text>}
+            </Button>
           </View>
 
-          <TextInput
-            style={styles.feedbackInput}
-            placeholder={feedbackType === 'bug' ? "Describí el problema detalladamente..." : "Contanos tu idea para mejorar la app..."}
-            placeholderTextColor={Theme.colors.textMuted}
-            multiline={true}
-            numberOfLines={4}
-            value={feedbackMessage}
-            onChangeText={setFeedbackMessage}
-            textAlignVertical="top"
-          />
+          {/* FOOTER */}
+          <View className="items-center pb-8" accessible={true}>
+            <Text className="text-sm font-black text-gray-700 uppercase tracking-widest mb-1">Apronovid v1.2.0</Text>
+            <Text className="text-xs text-neutral-400 font-medium">© 2026 Desarrollado por Jano</Text>
+          </View>
 
-          <TouchableOpacity style={styles.submitFeedbackBtn} onPress={handleSubmitFeedback} disabled={isSubmittingFeedback}>
-            {isSubmittingFeedback ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveText}>Enviar mensaje</Text>}
-          </TouchableOpacity>
-        </View>
-
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutText}>🚪 Cerrar Sesión</Text>
-        </TouchableOpacity>
-
-        {/* 🌟 SECCIÓN: COPYRIGHT Y VERSIÓN */}
-        <View style={styles.footerContainer} accessible={true}>
-          <Text style={styles.versionText}>Apronovid v1.1.0</Text>
-          <Text style={styles.copyrightText}>© 2026 Desarrollado por Iván Andrés Calcagno</Text>
-        </View>
-
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </ScreenWrapper>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Theme.colors.background },
-  scrollContent: { padding: Theme.spacing.padding, paddingBottom: 40 },
-  header: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: Theme.colors.border },
-  headerBrand: { flexDirection: 'row', alignItems: 'center' },
-  headerLogo: { width: 36, height: 36, marginRight: 12 },
-  title: { fontSize: Theme.text.fontSizeHeader, fontWeight: 'bold', color: Theme.colors.primary },
-  
-  // 🌟 Estilos de la nueva Tarjeta de Perfil
-  profileCard: { backgroundColor: Theme.colors.backgroundCard, padding: 24, borderRadius: Theme.spacing.borderRadiusCard, borderWidth: 1, borderColor: Theme.colors.border, marginBottom: 20, alignItems: 'center' },
-  avatarContainer: { width: 70, height: 70, borderRadius: 35, backgroundColor: Theme.colors.primary, justifyContent: 'center', alignItems: 'center', marginBottom: 16, elevation: 2 },
-  profileName: { fontSize: 22, fontWeight: 'bold', color: Theme.colors.text, marginBottom: 4, textAlign: 'center' },
-  profileEmail: { fontSize: 14, color: Theme.colors.textMuted, marginBottom: 16, textAlign: 'center', paddingHorizontal: 10 },
-  roleBadge: { backgroundColor: '#E0E7FF', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16 },
-  roleBadgeText: { color: Theme.colors.primary, fontWeight: 'bold', fontSize: 12, textTransform: 'uppercase' },
-
-  // Estilos del Banner de Donaciones
-  donationCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF0F5', padding: 16, borderRadius: Theme.spacing.borderRadiusCard, borderWidth: 1, borderColor: '#FFB6C1', marginBottom: 24, elevation: 1 },
-  donationIconContainer: { width: 50, height: 50, borderRadius: 25, backgroundColor: Theme.colors.primary, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-  donationTextContainer: { flex: 1 },
-  donationTitle: { fontSize: 16, fontWeight: 'bold', color: Theme.colors.primary, marginBottom: 4 },
-  donationDesc: { fontSize: 13, color: '#555', lineHeight: 18 },
-
-  section: { backgroundColor: Theme.colors.backgroundCard, padding: 20, borderRadius: Theme.spacing.borderRadiusCard, borderWidth: 1, borderColor: Theme.colors.border, marginBottom: 16 },
-  sectionTitle: { fontSize: Theme.text.fontSizeBody, fontWeight: 'bold', color: Theme.colors.primary, marginBottom: 12 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  actionText: { color: Theme.colors.accent, fontSize: Theme.text.fontSizeBody, fontWeight: 'bold' },
-  buttonRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 8 },
-  cancelBtn: { paddingVertical: 10, paddingHorizontal: 16 },
-  cancelText: { color: Theme.colors.textMuted, fontWeight: 'bold', fontSize: Theme.text.fontSizeBody },
-  saveBtn: { backgroundColor: Theme.colors.primary, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
-  saveText: { color: '#FFF', fontWeight: 'bold', fontSize: Theme.text.fontSizeBody },
-  logoutButton: { backgroundColor: Theme.colors.danger, paddingVertical: 18, borderRadius: Theme.spacing.borderRadius, alignItems: 'center', marginTop: 10, marginBottom: 30 },
-  logoutText: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
-  passwordContainer: { position: 'relative', justifyContent: 'center' },
-  inputWithIcon: { backgroundColor: Theme.colors.background, padding: 14, paddingRight: 50, borderRadius: 8, borderWidth: 1, borderColor: Theme.colors.border, marginBottom: 12, fontSize: Theme.text.fontSizeBody, color: Theme.colors.text },
-  eyeButton: { position: 'absolute', right: 15, top: 14, zIndex: 1 },
-  
-  sectionSubtitle: { fontSize: 14, color: Theme.colors.textMuted, marginBottom: 15, lineHeight: 20 },
-  feedbackTypeContainer: { flexDirection: 'row', marginBottom: 15, gap: 10 },
-  feedbackTypeBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: Theme.colors.border, backgroundColor: Theme.colors.background },
-  feedbackTypeBtnActive: { backgroundColor: Theme.colors.primary, borderColor: Theme.colors.primary },
-  feedbackTypeText: { marginLeft: 6, fontSize: 14, fontWeight: '600', color: Theme.colors.textMuted },
-  feedbackTypeTextActive: { color: '#FFF' },
-  feedbackInput: { backgroundColor: Theme.colors.background, borderWidth: 1, borderColor: Theme.colors.border, borderRadius: 8, padding: 14, minHeight: 100, fontSize: 15, color: Theme.colors.text, marginBottom: 15 },
-  submitFeedbackBtn: { backgroundColor: Theme.colors.primary, paddingVertical: 14, borderRadius: 8, alignItems: 'center' },
-
-  statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-  statBox: { flex: 1, backgroundColor: Theme.colors.background, padding: 12, borderRadius: 12, alignItems: 'center', marginHorizontal: 4, borderWidth: 1, borderColor: Theme.colors.border },
-  statNumber: { fontSize: 20, fontWeight: 'bold', color: Theme.colors.text, flexDirection: 'row', alignItems: 'center' },
-  statLabel: { fontSize: 12, color: Theme.colors.textMuted, marginTop: 4, textAlign: 'center' },
-  badgesHeader: { fontSize: 16, fontWeight: 'bold', color: Theme.colors.text, marginBottom: 10, marginTop: 10 },
-  badgesContainer: { marginTop: 5 },
-  badgeCard: { flexDirection: 'row', backgroundColor: Theme.colors.background, padding: 12, borderRadius: 12, marginBottom: 10, alignItems: 'center', borderWidth: 1, borderColor: Theme.colors.border },
-  iconCircle: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  badgeTextContainer: { flex: 1 },
-  badgeTitle: { fontSize: 16, fontWeight: 'bold', color: Theme.colors.text },
-  badgeDesc: { fontSize: 13, color: Theme.colors.textMuted, marginTop: 2 },
-  emptyText: { fontSize: 14, color: Theme.colors.textMuted, fontStyle: 'italic', textAlign: 'center', marginTop: 10 },
-
-  // Estilos del Footer de Copyright
-  footerContainer: { alignItems: 'center', marginTop: 10, paddingBottom: 20 },
-  versionText: { fontSize: 14, fontWeight: 'bold', color: Theme.colors.textMuted, marginBottom: 4 },
-  copyrightText: { fontSize: 12, color: Theme.colors.textMuted }
-});

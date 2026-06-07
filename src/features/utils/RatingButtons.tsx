@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, TouchableOpacity, StyleSheet, Text } from 'react-native';
+import { View, TouchableOpacity, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api'; 
 import Toast from 'react-native-toast-message';
@@ -16,7 +16,6 @@ const RatingButtons = ({ volunteerId, audioId }: RatingButtonsProps) => {
     if (hasVoted) return;
 
     try {
-      // Actualización optimista: Ocultamos el componente al instante
       setHasVoted(true);
       
       await api.post(`/volunteers/${volunteerId}/rate`, { vote: type, audio_id: audioId });
@@ -29,7 +28,6 @@ const RatingButtons = ({ volunteerId, audioId }: RatingButtonsProps) => {
       });
 
     } catch (error) {
-      // Si el servidor falla, volvemos a mostrar los botones para que reintente
       setHasVoted(false);
       Toast.show({
         type: 'error',
@@ -40,22 +38,24 @@ const RatingButtons = ({ volunteerId, audioId }: RatingButtonsProps) => {
     }
   };
 
-  // 🌟 ACÁ ESTÁ LA MAGIA: Si ya votó, no renderizamos absolutamente NADA.
   if (hasVoted) {
     return null;
   }
 
   return (
-    <View style={styles.wrapper}>
-      {/* Mude el texto de la pregunta para acá adentro */}
-      <Text style={styles.promptText}>
+    <View className="mt-4 border-t border-gray-200 pt-3">
+      
+      {/* Mensaje */}
+      <Text className="text-center text-gray-500 mb-1.5 text-xs font-medium">
         ¿Qué te pareció la calidad de esta lectura?
       </Text>
       
-      <View style={styles.container} accessible={false}>
+      {/* Botones */}
+      <View className="flex-row justify-around py-2.5" accessible={false}>
+        
         {/* Botón Positivo */}
         <TouchableOpacity
-          style={[styles.button, styles.likeButton]}
+          className="w-20 h-20 rounded-full bg-[#4CAF50] justify-center items-center shadow-sm"
           onPress={() => handleVote('like')}
           accessible={true}
           accessibilityRole="button"
@@ -66,7 +66,7 @@ const RatingButtons = ({ volunteerId, audioId }: RatingButtonsProps) => {
 
         {/* Botón Negativo */}
         <TouchableOpacity
-          style={[styles.button, styles.dislikeButton]}
+          className="w-20 h-20 rounded-full bg-[#F44336] justify-center items-center shadow-sm"
           onPress={() => handleVote('dislike')}
           accessible={true}
           accessibilityRole="button"
@@ -78,39 +78,5 @@ const RatingButtons = ({ volunteerId, audioId }: RatingButtonsProps) => {
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  wrapper: {
-    marginTop: 15,
-    borderTopWidth: 1,
-    borderColor: '#E0E0E0', // Color del borde
-    paddingTop: 10,
-  },
-  promptText: {
-    textAlign: 'center',
-    color: '#666666', // Texto muteado
-    marginBottom: 5,
-    fontSize: 12,
-  },
-  container: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 10,
-  },
-  button: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 3, 
-  },
-  likeButton: {
-    backgroundColor: '#4CAF50', 
-  },
-  dislikeButton: {
-    backgroundColor: '#F44336', 
-  },
-});
 
 export default RatingButtons;

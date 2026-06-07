@@ -1,10 +1,17 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { View, FlatList, ActivityIndicator, TouchableOpacity, Image, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import api from '../../services/api';
-import { Theme } from '../../styles/theme'; 
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
+import { cn } from '../../lib/utils';
+
+// 🌟 Componentes RNR Base
+import ScreenWrapper from '../../components/ScreenWrapper';
+import { Text } from '../../components/ui/text';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
 
 const logoMedalla = require('../../../assets/favicon.png');
 
@@ -20,6 +27,7 @@ export default function VolunteerWall({ navigation }: any) {
   const [requests, setRequests] = useState<ReadingRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Estados del Dialog de Reporte
   const [isReportModalVisible, setIsReportModalVisible] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [selectedRequest, setSelectedRequest] = useState<{id: number, title: string} | null>(null);
@@ -51,14 +59,15 @@ export default function VolunteerWall({ navigation }: any) {
 
   const closeReportModal = () => {
     setIsReportModalVisible(false);
-    setSelectedRequest(null);
-    setReportReason('');
+    setTimeout(() => {
+      setSelectedRequest(null);
+      setReportReason('');
+    }, 300); // Dar tiempo a que termine la animación antes de limpiar
   };
 
   const submitReport = async () => {
     if (reportReason.trim().length < 5) {
-      closeReportModal();
-      Toast.show({ type: 'error', text1: 'Atención', text2: 'Por favor, detallá el motivo del reporte.', position: 'bottom', visibilityTime: 7000 });
+      Toast.show({ type: 'error', text1: 'Atención', text2: 'Por favor, detallá el motivo del reporte.', position: 'bottom', visibilityTime: 4000 });
       return;
     }
 
@@ -75,8 +84,7 @@ export default function VolunteerWall({ navigation }: any) {
         type: 'success', 
         text1: 'Reporte Enviado', 
         text2: response.data.message,
-        position: 'bottom',
-        visibilityTime: 4000
+        position: 'bottom'
       });
 
       if (response.data.message.includes('ocultado')) {
@@ -85,176 +93,166 @@ export default function VolunteerWall({ navigation }: any) {
 
       closeReportModal();
     } catch (error: any) {
-      // 🌟 NUEVO: Leemos el mensaje de error exacto que nos manda Laravel
       const errorMsg = error.response?.data?.message || 'No se pudo reportar el pedido. Intentá de nuevo.';
-      
+      Toast.show({ type: 'error', text1: 'No permitido', text2: errorMsg, position: 'bottom' });
       closeReportModal();
-      Toast.show({ 
-        type: 'error', 
-        text1: 'No permitido', 
-        text2: errorMsg,
-        position: 'bottom',
-        visibilityTime: 4000
-      });
     } finally {
       setIsSubmittingReport(false);
     }
   };
 
+  // 🌟 TARJETA ÉPICA DEL MURO
   const renderItem = ({ item }: { item: ReadingRequest }) => (
-    <View style={styles.card} accessible={true}>
+    <View className="bg-card p-5 rounded-[28px] mb-5 shadow-lg shadow-black/5 border border-border/60">
       
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>{item.title}</Text>
-        <TouchableOpacity onPress={() => openReportModal(item.id, item.title)} style={styles.reportBtn}>
-            <Ionicons name="flag" size={16} color={Theme.colors.danger} />
+      <View className="flex-row justify-between items-start mb-3">
+        <View className="flex-1 mr-3" accessible={true} accessibilityRole="text" accessibilityLabel={`Pedido: ${item.title}`}>
+          <Text className="text-2xl font-extrabold text-foreground leading-tight" importantForAccessibility="no">
+            {item.title}
+          </Text>
+        </View>
+        
+        {/* Botón de Reportar Circular */}
+        <TouchableOpacity 
+          onPress={() => openReportModal(item.id, item.title)} 
+          className="w-12 h-12 bg-red-50 rounded-full border border-red-200 items-center justify-center shadow-sm"
+          accessibilityRole="button"
+          accessibilityLabel={`Reportar pedido: ${item.title}`}
+          accessibilityHint="Abre un formulario para denunciar este texto a los administradores."
+        >
+            <Ionicons name="flag" size={20} color="#DC2626" importantForAccessibility="no" />
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.cardDescription} numberOfLines={3}>
+      <Text className="text-base text-muted-foreground mb-4 leading-relaxed" numberOfLines={3}>
         {item.description_or_text}
       </Text>
       
+      {/* Badge de Archivo Adjunto */}
       {item.file_path && (
-        <Text style={styles.fileBadge}>📄 Contiene archivo adjunto</Text>
+        <View className="flex-row items-center bg-indigo-50 border border-indigo-200 px-3.5 py-2 rounded-xl mb-4 self-start" accessible={true} accessibilityLabel="Este pedido contiene un archivo adjunto para leer">
+          <Ionicons name="document-attach" size={16} color="#4F46E5" importantForAccessibility="no" />
+          <Text className="text-xs font-bold text-indigo-700 ml-1.5 uppercase tracking-widest" importantForAccessibility="no">Archivo Adjunto</Text>
+        </View>
       )}
 
-      <TouchableOpacity 
-        style={styles.actionButton}
+      {/* Botón Principal */}
+      <Button 
+        size="lg"
+        className="w-full h-14 rounded-[20px] shadow-md shadow-primary/20 mt-1"
         onPress={() => navigation.navigate('VolunteerDashboard', { request: item })}
+        accessibilityLabel={`Seleccionar ${item.title} para grabar`}
+        accessibilityHint="Abre el estudio de grabación para empezar a leer este texto."
       >
-        <Text style={styles.actionButtonText}>🎙️ Seleccionar para Grabar</Text>
-      </TouchableOpacity>
+        <Ionicons name="mic" size={20} color="#FFF" style={{ marginRight: 8 }} importantForAccessibility="no" />
+        <Text className="text-white font-extrabold text-lg" importantForAccessibility="no">Grabar Lectura</Text>
+      </Button>
     </View>
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerBrand}>
-          <Image source={logoMedalla} style={styles.headerLogo} />
-          <Text style={styles.title} accessibilityRole="header">Pedidos</Text>
+    <ScreenWrapper withBottomInsets={false}>
+      
+      {/* 🌟 HEADER FIJO ÉPICO */}
+      <View className="px-6 pt-4 pb-4 border-b border-border bg-background/90 z-10">
+        <View className="flex-row items-center">
+          <Image source={logoMedalla} className="w-9 h-9 mr-3 rounded-lg shadow-sm" importantForAccessibility="no" />
+          <Text className="text-3xl font-extrabold tracking-tight text-foreground" accessibilityRole="header">Muro de Pedidos</Text>
         </View>
+        <Text className="text-base text-muted-foreground mt-1 font-medium">Textos esperando por una voz.</Text>
       </View>
 
+      {/* 🌟 CONTENIDO PRINCIPAL */}
       {isLoading ? (
-        <ActivityIndicator size="large" color={Theme.colors.primary} style={{ marginTop: 50 }} />
+        <View className="flex-1 justify-center items-center">
+          <ActivityIndicator size="large" color="#0F172A" />
+        </View>
       ) : requests.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>No hay pedidos pendientes. ¡Todo está leído!</Text>
+        <View className="flex-1 justify-center items-center px-8 mt-16">
+          <View className="bg-primary/5 w-32 h-32 rounded-full items-center justify-center mb-6 border border-primary/10">
+            <Ionicons name="albums-outline" size={64} color="#1D4ED8" importantForAccessibility="no" />
+          </View>
+          <Text className="text-2xl font-bold text-foreground mb-2 text-center" accessibilityRole="header">Muro Limpio</Text>
+          <Text className="text-base text-muted-foreground text-center leading-relaxed">
+            No hay pedidos pendientes en este momento. ¡Todo está leído! Volvé más tarde.
+          </Text>
         </View>
       ) : (
         <FlatList
           data={requests}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderItem}
-          contentContainerStyle={{ paddingBottom: 20 }}
+          contentContainerStyle={{ paddingBottom: 80, paddingHorizontal: 20, paddingTop: 24 }}
           showsVerticalScrollIndicator={false}
         />
       )}
 
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={isReportModalVisible}
-        onRequestClose={closeReportModal}
-      >
-        {/* 🌟 ACÁ ESTÁ LA MAGIA: behavior a undefined en Android para evitar que pelee con el OS */}
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
-          style={styles.modalOverlay}
-        >
-          {/* 🌟 Otro tip pro de UX: Si tocan afuera de la cajita, se cierra el teclado */}
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <View style={styles.modalBackgroundTouch}>
-              <TouchableWithoutFeedback onPress={() => {}}>
-                <View style={styles.modalContent}>
-                  
-                  <View style={styles.modalHeaderIcon}>
-                    <Ionicons name="warning" size={40} color={Theme.colors.danger} />
-                  </View>
-                  
-                  <Text style={styles.modalTitle}>Reportar Pedido</Text>
-                  
-                  {selectedRequest && (
-                    <Text style={styles.modalSubtitle}>
-                      Estás reportando el pedido: <Text style={{ fontWeight: 'bold' }}>{selectedRequest.title}</Text>
-                    </Text>
-                  )}
-
-                  <TextInput
-                    style={styles.reportInput}
-                    placeholder="¿Por qué reportás este texto? (Ej: Ilegible, inflige las normas, etc.)"
-                    placeholderTextColor={Theme.colors.textMuted}
-                    multiline={true}
-                    numberOfLines={4}
-                    value={reportReason}
-                    onChangeText={setReportReason}
-                    textAlignVertical="top"
-                    autoFocus={true}
-                  />
-
-                  <Text style={styles.modalWarningText}>
-                    Este reporte será revisado por un administrador. Si un pedido acumula 5 reportes, se ocultará automáticamente.
-                  </Text>
-
-                  <View style={styles.modalButtonsRow}>
-                    <TouchableOpacity style={styles.cancelBtn} onPress={closeReportModal} disabled={isSubmittingReport}>
-                      <Text style={styles.cancelBtnText}>Cancelar</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity style={styles.submitBtn} onPress={submitReport} disabled={isSubmittingReport}>
-                      {isSubmittingReport ? (
-                        <ActivityIndicator color="#FFF" />
-                      ) : (
-                        <Text style={styles.submitBtnText}>Enviar Reporte</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-
+      {/* 🌟 DIALOG DE REPORTE (Ajustado con ScrollView y topes de altura) */}
+      <Dialog open={isReportModalVisible} onOpenChange={(open) => !open && closeReportModal()}>
+        <DialogContent className="w-[92%] max-h-[100%] mx-auto bg-card rounded-[36px] p-6 border border-border shadow-2xl">
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <ScrollView 
+              showsVerticalScrollIndicator={false} 
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: 10 }}
+            >
+              
+              <DialogHeader className="items-center mb-6 mt-2">
+                <View className="w-24 h-24 bg-red-50 rounded-full items-center justify-center mb-4 border-[6px] border-red-100 shadow-sm">
+                  <Ionicons name="flag" size={40} color="#DC2626" importantForAccessibility="no" />
                 </View>
-              </TouchableWithoutFeedback>
-            </View>
-          </TouchableWithoutFeedback>
-        </KeyboardAvoidingView>
-      </Modal>
-    </View>
+                <DialogTitle className="text-3xl font-black text-foreground text-center tracking-tight">
+                  Reportar Pedido
+                </DialogTitle>
+                <DialogDescription className="text-center text-sm text-muted-foreground mt-2 px-2">
+                  Estás reportando el pedido:{"\n"}
+                  <Text className="font-extrabold text-foreground">{selectedRequest?.title}</Text>
+                </DialogDescription>
+              </DialogHeader>
+
+              <Input
+                className="rounded-[20px] bg-secondary/30 border-border focus:border-red-500 pt-4 px-4 text-foreground mb-4"
+                style={{ height: 110 }}
+                placeholder="¿Por qué reportás este texto? (Ej: Ilegible, spam...)"
+                placeholderTextColor="#9CA3AF"
+                multiline={true}
+                numberOfLines={4}
+                textAlignVertical="top"
+                value={reportReason}
+                onChangeText={setReportReason}
+              />
+
+              <Text className="text-[12px] text-muted-foreground text-center italic mb-6 font-medium px-2">
+                Este reporte será revisado. Si un pedido acumula 5 reportes, se ocultará automáticamente.
+              </Text>
+
+              <View className="flex-col gap-3">
+                <Button 
+                  variant="destructive" 
+                  size="lg" 
+                  className="w-full rounded-[16px] shadow-sm h-14" 
+                  onPress={submitReport} 
+                  disabled={isSubmittingReport}
+                >
+                  {isSubmittingReport ? <ActivityIndicator color="#FFF" /> : <Text className="text-white font-extrabold text-center w-full text-lg">Enviar Reporte</Text>}
+                </Button>
+                
+                <Button 
+                  variant="outline" 
+                  size="lg" 
+                  className="w-full rounded-[16px] border-border h-14" 
+                  onPress={closeReportModal} 
+                  disabled={isSubmittingReport}
+                >
+                  <Text className="font-bold text-foreground text-center w-full text-lg">Cancelar</Text>
+                </Button>
+              </View>
+
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </DialogContent>
+      </Dialog>
+      
+    </ScreenWrapper>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Theme.colors.background, paddingHorizontal: Theme.spacing.padding, paddingTop: Theme.spacing.padding },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: Theme.colors.border },
-  headerBrand: { flexDirection: 'row', alignItems: 'center' },
-  headerLogo: { width: 36, height: 36, marginRight: 12 }, 
-  title: { fontSize: Theme.text.fontSizeHeader, fontWeight: 'bold', color: Theme.colors.primary },
-  card: { backgroundColor: Theme.colors.backgroundCard, padding: 20, borderRadius: Theme.spacing.borderRadiusCard, marginBottom: 16, borderWidth: 1, borderColor: Theme.colors.border, elevation: 1 },
-  
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
-  cardTitle: { flex: 1, fontSize: Theme.text.fontSizeTitle, fontWeight: 'bold', color: Theme.colors.text, marginRight: 10 },
-  reportBtn: { padding: 8, backgroundColor: '#FFEBEE', borderRadius: 8 },
-
-  cardDescription: { fontSize: Theme.text.fontSizeBody, color: Theme.colors.textMuted, marginBottom: 12, lineHeight: 22 },
-  fileBadge: { color: Theme.colors.accent, fontSize: Theme.text.fontSizeMuted, fontWeight: 'bold', marginBottom: 16 },
-  actionButton: { backgroundColor: Theme.colors.buttonPrimary, paddingVertical: 14, borderRadius: Theme.spacing.borderRadius, alignItems: 'center' },
-  actionButtonText: { color: Theme.colors.buttonPrimaryText, fontWeight: 'bold', fontSize: Theme.text.fontSizeBody },
-  emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyText: { fontSize: Theme.text.fontSizeBody, color: Theme.colors.textMuted, textAlign: 'center' },
-
-  // 🌟 ESTILOS DEL MODAL DE REPORTE
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
-  modalBackgroundTouch: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { width: '100%', backgroundColor: Theme.colors.backgroundCard, borderRadius: 16, padding: 24, elevation: 5 },
-  modalHeaderIcon: { alignItems: 'center', marginBottom: 10 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', color: Theme.colors.text, textAlign: 'center', marginBottom: 8 },
-  modalSubtitle: { fontSize: 14, color: Theme.colors.textMuted, textAlign: 'center', marginBottom: 20 },
-  
-  reportInput: { backgroundColor: Theme.colors.background, borderWidth: 1, borderColor: Theme.colors.border, borderRadius: 8, padding: 14, minHeight: 100, fontSize: 15, color: Theme.colors.text, marginBottom: 15 },
-  modalWarningText: { fontSize: 12, color: Theme.colors.textMuted, textAlign: 'center', marginBottom: 20, fontStyle: 'italic' },
-  
-  modalButtonsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
-  cancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 8, alignItems: 'center', backgroundColor: Theme.colors.background, borderWidth: 1, borderColor: Theme.colors.border },
-  cancelBtnText: { color: Theme.colors.text, fontWeight: 'bold', fontSize: 15 },
-  submitBtn: { flex: 1, paddingVertical: 14, borderRadius: 8, alignItems: 'center', backgroundColor: Theme.colors.danger },
-  submitBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 }
-});

@@ -1,8 +1,6 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { Theme } from '../styles/theme';
-// 1. IMPORTAMOS EL HOOK MÁGICO
 import { useSafeAreaInsets } from 'react-native-safe-area-context'; 
 
 import ReaderDashboard from '../features/reader/ReaderDashboard';
@@ -14,7 +12,6 @@ import FavoritesScreen from '../features/reader/FavoritesScreen';
 const Tab = createBottomTabNavigator();
 
 export default function ReaderTabs() {
-  // 2. CAPTURAMOS EL ESPACIO DEL SISTEMA (Los botones del celular)
   const insets = useSafeAreaInsets(); 
 
   return (
@@ -29,15 +26,12 @@ export default function ReaderTabs() {
           else if (route.name === 'Perfil') iconName = focused ? 'person' : 'person-outline';
           return <Ionicons name={iconName} size={size + 4} color={color} />;
         },
-        tabBarActiveTintColor: Theme.colors.accent,
-        tabBarInactiveTintColor: Theme.colors.textMuted,
-        
-        // 3. ACTUALIZAMOS LOS ESTILOS DE LA BARRA
+        tabBarActiveTintColor: '#000000', 
+        tabBarInactiveTintColor: '#9CA3AF', 
         tabBarStyle: {
-          backgroundColor: Theme.colors.backgroundCard,
+          backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
-          borderTopColor: Theme.colors.border,
-          // Borramos el height fijo y hacemos que se calcule dinámicamente sumando la zona segura
+          borderTopColor: '#E5E7EB',
           height: 60 + insets.bottom, 
           paddingBottom: insets.bottom > 0 ? insets.bottom : 10,
           paddingTop: 10,

@@ -15,7 +15,8 @@ use Illuminate\Support\Facades\Log;
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/google-auth', [AuthController::class, 'googleAuth']);
-
+Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
+Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 // Rutas Protegidas (Requieren estar logueado)
 Route::middleware('auth:sanctum')->group(function () {
 

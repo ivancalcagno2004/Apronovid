@@ -1,10 +1,8 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { Theme } from '../styles/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context'; 
 
-// Importa las pantallas que crearemos
 import AdminDashboard from '../features/admin/AdminDashboard'; 
 import ProfileScreen from '../features/profile/ProfileScreen';
 import CatalogScreen from '../features/utils/CatalogScreen';
@@ -28,12 +26,12 @@ export default function AdminTabs() {
           else if (route.name === 'Perfil') iconName = focused ? 'person' : 'person-outline';
           return <Ionicons name={iconName} size={size + 4} color={color} />;
         },
-        tabBarActiveTintColor: Theme.colors.accent,
-        tabBarInactiveTintColor: Theme.colors.textMuted,
+        tabBarActiveTintColor: '#000000', 
+        tabBarInactiveTintColor: '#9CA3AF', 
         tabBarStyle: {
-          backgroundColor: Theme.colors.backgroundCard,
+          backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
-          borderTopColor: Theme.colors.border,
+          borderTopColor: '#E5E7EB',
           height: 60 + insets.bottom, 
           paddingBottom: insets.bottom > 0 ? insets.bottom : 10,
           paddingTop: 10,

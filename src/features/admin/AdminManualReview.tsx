@@ -1,16 +1,28 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, ScrollView, Image, Modal, TextInput, Linking } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, FlatList, ActivityIndicator, TouchableOpacity, Image, ScrollView, Linking } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import api, { SERVER_URL } from '../../services/api';
-import { Theme } from '../../styles/theme';
 import Toast from 'react-native-toast-message';
 import AudioPlayer from '../utils/AudioPlayer';
 import { WebView } from 'react-native-webview';
+import { cn } from '../../lib/utils'; 
+
+// 🌟 Componentes RNR Base
+import ScreenWrapper from '../../components/ScreenWrapper';
+import { Text } from '../../components/ui/text';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter } from '../../components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
+
+// 🌟 Modal Modularizado
+import VolunteerProfileModal from '../../components/VolunteerProfileModal';
 
 const logoMedalla = require('../../../assets/favicon.png');
 
-// 🌟 Subcomponente para cada tarjeta
-const ReviewItemCard = ({ item, playingId, setPlayingId, openRejectModal, handleApprove, showVolunteerProfile }: any) => {
+// 🌟 Subcomponente Refactorizado (ReviewItemCard)
+const ReviewItemCard = React.memo(({ item, playingId, setPlayingId, openRejectModal, handleApprove, showVolunteerProfile }: any) => {
   const [viewMode, setViewMode] = useState<'text' | 'document'>('text');
   
   const attachedFileUrl = item.reading_request?.file_path 
@@ -18,65 +30,73 @@ const ReviewItemCard = ({ item, playingId, setPlayingId, openRejectModal, handle
     : null;
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.title}>📌 Pedido: {item.reading_request?.title || 'Desconocido'}</Text>
+    <View className="bg-card p-5 rounded-[28px] mb-5 border border-border/60 shadow-lg shadow-black/5">
+      <View className="flex-row items-center mb-1.5">
+        <View className="bg-primary/10 p-1.5 rounded-lg mr-2">
+            <Ionicons name="document-text" size={16} color="#0F172A" />
+        </View>
+        <Text className="text-xl font-extrabold text-foreground flex-1" numberOfLines={1}>
+            {item.reading_request?.title || 'Desconocido'}
+        </Text>
+      </View>
       
-      {/* 🌟 Nombre del voluntario clickeable */}
       {item.volunteer?.id ? (
         <TouchableOpacity 
           onPress={() => showVolunteerProfile(item.volunteer.id)}
-          accessible={true}
+          className="flex-row items-center mb-4"
           accessibilityRole="button"
-          style={{ marginBottom: 15 }}
         >
-          <Text style={[styles.volunteer, { color: Theme.colors.primary, textDecorationLine: 'underline', marginBottom: 0 }]}>
-            🎙️ Voluntario: {item.volunteer.name}
+          <Ionicons name="mic" size={14} color="#2563EB" className="mr-1" />
+          <Text className="text-sm font-extrabold text-primary underline">
+             Voluntario: {item.volunteer.name}
           </Text>
         </TouchableOpacity>
       ) : (
-        <Text style={styles.volunteer}>🎙️ Voluntario: Desconocido</Text>
+        <View className="flex-row items-center mb-4">
+            <Ionicons name="mic" size={14} color="#94A3B8" className="mr-1" />
+            <Text className="text-sm font-medium text-muted-foreground">Voluntario: Desconocido</Text>
+        </View>
       )}
       
-      <View style={styles.textComparison}>
-        
+      <View className="mb-4">
         {attachedFileUrl ? (
-          <View style={styles.tabsContainer}>
+          <View className="flex-row bg-secondary/50 rounded-[14px] p-1 mb-4 border border-border/50">
             <TouchableOpacity
-              style={[styles.tabButton, viewMode === 'text' && styles.tabButtonActive]}
+              className={cn("flex-1 py-2.5 rounded-[10px] items-center", viewMode === 'text' && "bg-background shadow-sm")}
               onPress={() => setViewMode('text')}
             >
-              <Text style={[styles.tabText, viewMode === 'text' && styles.tabTextActive]}>
-                📝 Teleprompter
+              <Text className={cn("text-sm font-medium text-muted-foreground", viewMode === 'text' && "font-extrabold text-foreground")}>
+                Teleprompter
               </Text>
             </TouchableOpacity>
             
             <TouchableOpacity
-              style={[styles.tabButton, viewMode === 'document' && styles.tabButtonActive]}
+              className={cn("flex-1 py-2.5 rounded-[10px] items-center", viewMode === 'document' && "bg-background shadow-sm")}
               onPress={() => setViewMode('document')}
             >
-              <Text style={[styles.tabText, viewMode === 'document' && styles.tabTextActive]}>
-                📄 Archivo Adjunto
+              <Text className={cn("text-sm font-medium text-muted-foreground", viewMode === 'document' && "font-extrabold text-foreground")}>
+                Archivo Adjunto
               </Text>
             </TouchableOpacity>
           </View>
         ) : (
-          <Text style={styles.sectionTitle}>Texto Original a leer:</Text>
+          <Text className="text-sm font-extrabold text-foreground mb-2.5 uppercase tracking-widest">Texto a validar:</Text>
         )}
 
         {viewMode === 'text' && (
-          <ScrollView style={styles.textArea} nestedScrollEnabled>
-            <Text style={styles.textContent}>{item.reading_request?.description_or_text || 'Sin texto'}</Text>
+          <ScrollView className="bg-secondary/30 p-4 rounded-[20px] max-h-40 border border-border/50" nestedScrollEnabled showsVerticalScrollIndicator={true}>
+            <Text className="text-[15px] text-foreground font-medium leading-relaxed">{item.reading_request?.description_or_text || 'Sin texto'}</Text>
           </ScrollView>
         )}
 
         {viewMode === 'document' && attachedFileUrl && (
-          <View style={styles.webviewContainer}>
+          <View className="h-64 rounded-[20px] overflow-hidden border border-border/50 shadow-sm">
             <WebView
               source={{ uri: attachedFileUrl }}
-              style={styles.webview}
+              className="flex-1 bg-secondary/30"
               startInLoadingState={true}
               renderLoading={() => (
-                <ActivityIndicator color={Theme.colors.primary} style={styles.webviewLoader} />
+                <ActivityIndicator color="#0F172A" className="absolute top-1/2 left-1/2 -ml-4 -mt-4" />
               )}
               scalesPageToFit={true}
               bounces={false}
@@ -84,16 +104,16 @@ const ReviewItemCard = ({ item, playingId, setPlayingId, openRejectModal, handle
               nestedScrollEnabled={true}
             />
             <TouchableOpacity
-              style={styles.externalLinkButton}
+              className="bg-secondary p-3 items-center border-t border-border"
               onPress={() => Linking.openURL(attachedFileUrl)}
             >
-              <Text style={styles.externalLinkText}>Abrir en navegador externo ↗</Text>
+              <Text className="text-primary text-[13px] font-extrabold uppercase tracking-wide">Abrir en navegador externo ↗</Text>
             </TouchableOpacity>
           </View>
         )}
       </View>
 
-      <View style={styles.playerContainer}>
+      <View className="my-2 border-t border-b border-border/50 py-4">
         <AudioPlayer 
           audioUrl={`${SERVER_URL}/storage/${item.audio_path}`} 
           id={item.id.toString()} 
@@ -102,31 +122,41 @@ const ReviewItemCard = ({ item, playingId, setPlayingId, openRejectModal, handle
         />
       </View>
 
-      <View style={styles.buttonRow}>
-        <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn]} onPress={() => openRejectModal(item.id)}>
-          <Ionicons name="close-circle" size={20} color="#FFF" />
-          <Text style={styles.actionBtnText}>Rechazar</Text>
-        </TouchableOpacity>
+      <View className="flex-row justify-between gap-3 mt-3">
+        <Button 
+            variant="destructive"
+            className="flex-1 h-14 rounded-[16px] shadow-sm flex-row items-center justify-center bg-red-600"
+            onPress={() => openRejectModal(item.id)}
+        >
+          <Ionicons name="close-circle" size={20} color="#FFF" style={{ marginRight: 6 }} />
+          <Text className="text-white font-extrabold text-base">Rechazar</Text>
+        </Button>
         
-        <TouchableOpacity style={[styles.actionBtn, styles.approveBtn]} onPress={() => handleApprove(item.id)}>
-          <Ionicons name="checkmark-circle" size={20} color="#FFF" />
-          <Text style={styles.actionBtnText}>Aprobar</Text>
-        </TouchableOpacity>
+        <Button 
+            className="flex-1 h-14 rounded-[16px] shadow-sm flex-row items-center justify-center bg-green-600 active:bg-green-700"
+            onPress={() => handleApprove(item.id)}
+        >
+          <Ionicons name="checkmark-circle" size={20} color="#FFF" style={{ marginRight: 6 }} />
+          <Text className="text-white font-extrabold text-base">Aprobar</Text>
+        </Button>
       </View>
     </View>
   );
-};
+});
 
 export default function AdminManualReview() {
   const [reviews, setReviews] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [playingId, setPlayingId] = useState<string | null>(null);
 
+  // Estados de Modales (Rechazo y Aprobación)
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [rejectingId, setRejectingId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
-  // 🌟 Estados para el Modal de Perfil
+  const [approveConfig, setApproveConfig] = useState<{visible: boolean, id: number | null}>({ visible: false, id: null });
+
+  // Estado del Perfil
   const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
   const [publicProfileData, setPublicProfileData] = useState<any>(null);
 
@@ -146,26 +176,17 @@ export default function AdminManualReview() {
     }
   };
 
-  const handleApprove = (id: number) => {
-    Alert.alert(
-      'Aprobar Audio',
-      '¿El voluntario leyó correctamente el texto?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Sí, Aprobar',
-          onPress: async () => {
-            try {
-              await api.post(`/admin/manual-reviews/${id}/approve`);
-              Toast.show({ type: 'success', text1: 'Listo', text2: 'Se aprobó el audio.' });
-              fetchReviews();
-            } catch (error) {
-              Toast.show({ type: 'error', text1: 'Error', text2: 'Hubo un problema procesando la solicitud.' });
-            }
-          }
-        }
-      ]
-    );
+  const confirmApprove = async () => {
+    if (!approveConfig.id) return;
+    
+    setApproveConfig({ visible: false, id: null });
+    try {
+      await api.post(`/admin/manual-reviews/${approveConfig.id}/approve`);
+      Toast.show({ type: 'success', text1: 'Aprobado', text2: 'El audio fue validado exitosamente.' });
+      fetchReviews();
+    } catch (error) {
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Hubo un problema procesando la solicitud.' });
+    }
   };
 
   const openRejectModal = (id: number) => {
@@ -176,7 +197,7 @@ export default function AdminManualReview() {
 
   const confirmReject = async () => {
     if (!rejectReason.trim()) {
-      Toast.show({ type: 'error', text1: 'Error', text2: 'Debés escribir un motivo para rechazarlo.', position: 'bottom' });
+      Toast.show({ type: 'error', text1: 'Atención', text2: 'Debés escribir un motivo para rechazarlo.', position: 'bottom' });
       return;
     }
 
@@ -190,29 +211,34 @@ export default function AdminManualReview() {
     }
   };
 
-  // 🌟 Función para abrir el perfil del voluntario
   const showVolunteerProfile = async (volunteerId: number) => {
     try {
+      setPublicProfileData(null);
+      setIsProfileModalVisible(true);
       const response = await api.get(`/volunteer/${volunteerId}/public-stats`);
       setPublicProfileData(response.data);
-      setIsProfileModalVisible(true);
     } catch (error) {
+      setIsProfileModalVisible(false);
       Toast.show({ type: 'error', text1: 'Error', text2: 'No se pudo cargar el perfil del voluntario.', position: 'bottom' });
     }
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerBrand}>
-            <Image source={logoMedalla} style={styles.headerLogo} />
-            <Text style={styles.mainTitle} accessibilityRole="header">Validación Manual</Text>
+    <ScreenWrapper withBottomInsets={false}>
+      
+      {/* 🌟 HEADER FIJO */}
+      <View className="px-6 pt-4 pb-4 bg-background/90 z-10 border-b border-border/60">
+        <View className="flex-row items-center">
+            <Image source={logoMedalla} className="w-9 h-9 mr-3 rounded-lg shadow-sm" />
+            <Text className="text-3xl font-extrabold tracking-tight text-foreground" accessibilityRole="header">Revisión Manual</Text>
         </View>
-        <Text style={styles.subtitle}>Revisiones de audios tras fallos automáticos de la IA.</Text>
+        <Text className="text-base text-muted-foreground mt-1 font-medium">Validación de audios con observaciones del sistema</Text>
       </View>
       
       {isLoading ? (
-        <ActivityIndicator size="large" color={Theme.colors.primary} style={{ marginTop: 50 }} />
+        <View className="flex-1 justify-center items-center">
+            <ActivityIndicator size="large" color="#0F172A" />
+        </View>
       ) : (
         <FlatList
           data={reviews}
@@ -223,189 +249,91 @@ export default function AdminManualReview() {
               playingId={playingId} 
               setPlayingId={setPlayingId} 
               openRejectModal={openRejectModal} 
-              handleApprove={handleApprove} 
-              showVolunteerProfile={showVolunteerProfile} // 🌟 Pasamos la función al subcomponente
+              handleApprove={(id: number) => setApproveConfig({ visible: true, id })} 
+              showVolunteerProfile={showVolunteerProfile} 
             />
           )}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={{ paddingBottom: 80, paddingHorizontal: 20, paddingTop: 24 }}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Ionicons name="checkmark-done-circle" size={60} color={Theme.colors.success} />
-              <Text style={styles.emptyText}>No hay audios pendientes de revisión manual. ¡La IA está trabajando bien!</Text>
+            <View className="flex-1 justify-center items-center px-8 mt-16">
+              <View className="bg-green-50 w-32 h-32 rounded-full items-center justify-center mb-6 border border-green-100 shadow-sm">
+                <Ionicons name="checkmark-done" size={64} color="#16A34A" />
+              </View>
+              <Text className="text-2xl font-bold text-foreground mb-2 text-center">Todo al día</Text>
+              <Text className="text-base text-muted-foreground text-center leading-relaxed">
+                No hay audios pendientes de revisión manual. ¡La Inteligencia Artificial está procesando todo correctamente!
+              </Text>
             </View>
           }
         />
       )}
 
-      {/* MODAL DE FEEDBACK DE RECHAZO */}
-      <Modal animationType="slide" transparent={true} visible={rejectModalVisible} onRequestClose={() => setRejectModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Motivo del Rechazo</Text>
-            <Text style={styles.modalSubtitle}>Explicá por qué el audio no es válido. Este mensaje le llegará al voluntario.</Text>
-            
-            <TextInput
-              style={styles.modalInput}
-              multiline
-              numberOfLines={4}
-              placeholder="Ej: Se escucha mucho ruido de fondo, o faltó leer el último párrafo..."
-              value={rejectReason}
-              onChangeText={setRejectReason}
-              textAlignVertical="top"
+      {/* 🌟 DIALOG DE RECHAZO (RNR) */}
+      <Dialog open={rejectModalVisible} onOpenChange={(open) => !open && setRejectModalVisible(false)}>
+        <DialogContent className="w-[90%] mx-auto bg-card rounded-[32px] p-6 border border-border shadow-2xl">
+            <DialogHeader className="items-center mb-4">
+                <View className="w-16 h-16 rounded-full bg-red-100 items-center justify-center mb-4">
+                    <Ionicons name="close-circle" size={32} color="#DC2626" />
+                </View>
+                <DialogTitle className="text-2xl font-extrabold text-foreground text-center">Rechazar Audio</DialogTitle>
+                <DialogDescription className="text-base font-medium text-muted-foreground mt-2 text-center">
+                    Explicá por qué el audio no es válido. Este mensaje le llegará directamente al voluntario para que pueda mejorar.
+                </DialogDescription>
+            </DialogHeader>
+
+            <Input
+                className="rounded-[20px] bg-secondary/30 border-border/50 focus:border-red-500 pt-4 px-5 text-foreground text-base mb-2"
+                style={{ height: 120, textAlignVertical: 'top' }}
+                multiline
+                numberOfLines={4}
+                placeholder="Ej: Se escucha mucho ruido de fondo, o faltó leer el último párrafo..."
+                placeholderTextColor="#9CA3AF"
+                value={rejectReason}
+                onChangeText={setRejectReason}
             />
 
-            <View style={styles.modalButtonRow}>
-              <TouchableOpacity style={[styles.modalBtn, styles.modalCancelBtn]} onPress={() => setRejectModalVisible(false)}>
-                <Text style={styles.modalCancelText}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalBtn, styles.modalConfirmBtn]} onPress={confirmReject}>
-                <Text style={styles.modalConfirmText}>Enviar y Rechazar</Text>
-              </TouchableOpacity>
+            <View className="flex-col gap-3 mt-4">
+                <Button variant="destructive" size="lg" className="rounded-[16px] w-full h-14" onPress={confirmReject}>
+                    <Text className="text-white font-extrabold text-center w-full text-lg">Enviar y Rechazar</Text>
+                </Button>
+                <Button variant="outline" size="lg" className="rounded-[16px] w-full h-14 border-border/80" onPress={() => setRejectModalVisible(false)}>
+                    <Text className="font-extrabold text-center w-full text-foreground text-lg">Cancelar</Text>
+                </Button>
             </View>
-          </View>
-        </View>
-      </Modal>
+        </DialogContent>
+      </Dialog>
 
-      {/* 🌟 MODAL DEL PERFIL PÚBLICO DEL VOLUNTARIO */}
-      <Modal animationType="fade" transparent={true} visible={isProfileModalVisible} onRequestClose={() => setIsProfileModalVisible(false)} accessibilityViewIsModal={true}>
-        <View style={styles.profileModalOverlay}>
-          <View style={styles.profileModalContent}>
-            
-            {publicProfileData ? (
-              <>
-                <View style={styles.profileModalHeader}>
-                  <View style={styles.profileModalIconContainer}>
-                    <Ionicons name="person-circle" size={60} color={Theme.colors.primary} />
-                  </View>
-                  <Text style={styles.profileModalName} accessibilityRole="header">
-                    {publicProfileData.name}
-                  </Text>
-                  <Text style={styles.profileModalSubtitle}>Narrador Voluntario</Text>
-                </View>
+      {/* 🌟 ALERT DIALOG DE APROBACIÓN (RNR) */}
+      <AlertDialog open={approveConfig.visible} onOpenChange={(open) => !open && setApproveConfig({ visible: false, id: null })}>
+        <AlertDialogContent className="w-[90%] mx-auto bg-card rounded-[32px] p-6 border border-border shadow-2xl">
+          <AlertDialogHeader className="items-center mb-2">
+            <View className="bg-green-100 w-16 h-16 rounded-full items-center justify-center mb-4">
+              <Ionicons name="checkmark-circle" size={32} color="#16A34A" />
+            </View>
+            <AlertDialogTitle className="text-2xl font-extrabold text-foreground text-center">¿Aprobar Audio?</AlertDialogTitle>
+            <AlertDialogDescription className="text-base font-medium text-muted-foreground mt-2 leading-relaxed text-center">
+              Estás a punto de aprobar este audio. Quedará disponible inmediatamente para el oyente que lo solicitó.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col gap-3 mt-6">
+            <Button className="bg-green-600 active:bg-green-700 rounded-[16px] w-full h-14" size="lg" onPress={confirmApprove}>
+              <Text className="text-white font-extrabold text-center w-full text-lg">Sí, aprobar lectura</Text>
+            </Button>
+            <Button variant="outline" size="lg" className="rounded-[16px] w-full h-14 border-border/80" onPress={() => setApproveConfig({ visible: false, id: null })}>
+              <Text className="font-extrabold text-center w-full text-foreground text-lg">Cancelar</Text>
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-                <View style={styles.profileModalStatsContainer}>
-                  <View style={styles.profileModalStatBox}>
-                    <Text style={styles.profileModalStatNumber}>{publicProfileData.public_audios}</Text>
-                    <Text style={styles.profileModalStatLabel}>Públicos</Text>
-                  </View>
+      {/* 🌟 DIALOG ÉPICO DE RNR (Perfil Público Reutilizado) */}
+      <VolunteerProfileModal 
+        visible={isProfileModalVisible} 
+        onClose={() => setIsProfileModalVisible(false)} 
+        profileData={publicProfileData} 
+      />
 
-                  <View style={styles.profileModalStatBox}>
-                    <Text style={styles.profileModalStatNumber}>{publicProfileData.private_audios}</Text>
-                    <Text style={styles.profileModalStatLabel}>Privados</Text>
-                  </View>
-
-                  <View style={styles.profileModalStatBox}>
-                    <Text style={styles.profileModalStatNumber}>
-                      {publicProfileData.stars ? publicProfileData.stars : '--'}
-                      {publicProfileData.stars && <Ionicons name="star" size={14} color="#FFD700" style={{ marginLeft: 2 }} />}
-                    </Text>
-                    <Text style={styles.profileModalStatLabel}>Estrellas</Text>
-                  </View>
-                </View>
-
-                <Text style={styles.profileModalBadgesTitle} accessibilityRole="header">Logros Destacados</Text>
-                
-                {publicProfileData.badges && publicProfileData.badges.length > 0 ? (
-                  <View style={styles.profileModalBadgesList}>
-                    {publicProfileData.badges.map((badgeName: string, index: number) => (
-                      <View key={index} style={styles.profileModalBadgeItem}>
-                        <Ionicons name="medal" size={20} color="#FFD700" style={{ marginRight: 10 }} />
-                        <Text style={styles.profileModalBadgeText}>{badgeName}</Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : (
-                  <Text style={styles.profileModalEmptyText}>Este voluntario aún no ha desbloqueado medallas.</Text>
-                )}
-              </>
-            ) : (
-              <ActivityIndicator size="large" color={Theme.colors.primary} style={{ marginVertical: 30 }} />
-            )}
-
-            <TouchableOpacity 
-              style={styles.profileModalCloseBtn} 
-              onPress={() => setIsProfileModalVisible(false)}
-            >
-              <Text style={styles.profileModalCloseText}>Cerrar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-    </View>
+    </ScreenWrapper>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Theme.colors.background, paddingTop: Theme.spacing.padding },
-  header: { marginBottom: 20, paddingHorizontal: Theme.spacing.padding, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: Theme.colors.border },
-  headerBrand: { flexDirection: 'row', alignItems: 'center' },
-  headerLogo: { width: 36, height: 36, marginRight: 12 },
-  mainTitle: { fontSize: Theme.text.fontSizeHeader, fontWeight: 'bold', color: Theme.colors.primary },
-  subtitle: { fontSize: Theme.text.fontSizeBody, color: Theme.colors.textMuted, marginTop: 5 },
-  listContent: { paddingBottom: 40, paddingHorizontal: Theme.spacing.padding },
-  
-  card: { backgroundColor: '#FFF', padding: 15, borderRadius: Theme.spacing.borderRadiusCard, marginBottom: 15, elevation: 1, borderWidth: 1, borderColor: Theme.colors.border },
-  title: { fontSize: 18, fontWeight: 'bold', marginBottom: 5, color: Theme.colors.text },
-  volunteer: { fontSize: 14, color: Theme.colors.textMuted, marginBottom: 15 },
-  textComparison: { marginBottom: 15 },
-  sectionTitle: { fontSize: 14, fontWeight: 'bold', color: Theme.colors.primary, marginBottom: 10 },
-  
-  tabsContainer: { flexDirection: 'row', backgroundColor: '#E0E7FF', borderRadius: 8, padding: 4, marginBottom: 12 },
-  tabButton: { flex: 1, paddingVertical: 8, borderRadius: 6, alignItems: 'center' },
-  tabButtonActive: { backgroundColor: '#FFF', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
-  tabText: { color: '#4F46E5', fontWeight: '500', fontSize: 14 },
-  tabTextActive: { fontWeight: 'bold' },
-
-  textArea: { backgroundColor: '#F1F3F5', padding: 10, borderRadius: 8, maxHeight: 150 },
-  textContent: { fontSize: 14, color: '#333' },
-
-  webviewContainer: { height: 250, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: Theme.colors.border },
-  webview: { flex: 1, backgroundColor: '#F1F3F5' },
-  webviewLoader: { position: 'absolute', top: '50%', left: '50%', marginLeft: -18, marginTop: -18 },
-  externalLinkButton: { backgroundColor: '#F1F3F5', padding: 10, alignItems: 'center', borderTopWidth: 1, borderColor: Theme.colors.border },
-  externalLinkText: { color: Theme.colors.primary, fontSize: 12, fontWeight: 'bold' },
-
-  playerContainer: { marginVertical: 10 },
-  buttonRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10, marginTop: 10 },
-  actionBtn: { flex: 1, flexDirection: 'row', padding: 12, borderRadius: 8, justifyContent: 'center', alignItems: 'center', gap: 5 },
-  rejectBtn: { backgroundColor: Theme.colors.danger },
-  approveBtn: { backgroundColor: Theme.colors.success },
-  actionBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
-  
-  emptyState: { alignItems: 'center', marginTop: 80 },
-  emptyText: { textAlign: 'center', marginTop: 15, color: Theme.colors.textMuted, fontSize: 16 },
-
-  // Estilos del Modal de Rechazo
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#FFF', padding: 24, borderRadius: 16, elevation: 10 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', color: Theme.colors.danger, marginBottom: 8 },
-  modalSubtitle: { fontSize: 14, color: Theme.colors.textMuted, marginBottom: 16 },
-  modalInput: { backgroundColor: '#F8F9FA', borderWidth: 1, borderColor: Theme.colors.border, borderRadius: 8, padding: 12, fontSize: 15, color: '#333', minHeight: 100 },
-  modalButtonRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 20, gap: 10 },
-  modalBtn: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 },
-  modalCancelBtn: { backgroundColor: '#F1F3F5' },
-  modalCancelText: { color: '#555', fontWeight: 'bold' },
-  modalConfirmBtn: { backgroundColor: Theme.colors.danger },
-  modalConfirmText: { color: '#FFF', fontWeight: 'bold' },
-
-  // 🌟 Estilos del Modal de Perfil
-  profileModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  profileModalContent: { width: '100%', backgroundColor: Theme.colors.backgroundCard, borderRadius: 20, padding: 24, elevation: 10 },
-  profileModalHeader: { alignItems: 'center', marginBottom: 20 },
-  profileModalIconContainer: { marginBottom: 10 },
-  profileModalName: { fontSize: 22, fontWeight: 'bold', color: Theme.colors.text, textAlign: 'center' },
-  profileModalSubtitle: { fontSize: 14, color: Theme.colors.textMuted, marginTop: 2 },
-  profileModalStatsContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 },
-  profileModalStatBox: { flex: 1, backgroundColor: Theme.colors.background, padding: 12, borderRadius: 12, alignItems: 'center', marginHorizontal: 4, borderWidth: 1, borderColor: Theme.colors.border },
-  profileModalStatNumber: { fontSize: 20, fontWeight: 'bold', color: Theme.colors.primary, flexDirection: 'row', alignItems: 'center' },
-  profileModalStatLabel: { fontSize: 12, color: Theme.colors.textMuted, marginTop: 4 },
-  profileModalBadgesTitle: { fontSize: 16, fontWeight: 'bold', color: Theme.colors.text, marginBottom: 15 },
-  profileModalBadgesList: { marginBottom: 10 },
-  profileModalBadgeItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF9E6', padding: 12, borderRadius: 10, marginBottom: 8, borderWidth: 1, borderColor: '#FFE8A1' },
-  profileModalBadgeText: { fontSize: 15, color: '#333', fontWeight: '500' },
-  profileModalEmptyText: { fontSize: 14, color: Theme.colors.textMuted, fontStyle: 'italic', textAlign: 'center', marginBottom: 20 },
-  profileModalCloseBtn: { backgroundColor: Theme.colors.border, padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 15 },
-  profileModalCloseText: { color: Theme.colors.text, fontSize: 16, fontWeight: 'bold' }
-});

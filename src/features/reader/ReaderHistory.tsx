@@ -1,16 +1,27 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, KeyboardAvoidingView, Platform, Image, Switch, ScrollView } from 'react-native';
+import { View, FlatList, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Image, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api, { SERVER_URL } from '../../services/api';
-import { Theme } from '../../styles/theme';
 import Toast from 'react-native-toast-message';
 import AudioPlayer from '../utils/AudioPlayer';
 import RatingButtons from '../utils/RatingButtons'; 
 import { useFocusEffect } from '@react-navigation/native';
+import { cn } from '../../lib/utils';
+import VolunteerProfileModal from '../../components/VolunteerProfileModal';
+// 🌟 Componentes RNR Base
+import ScreenWrapper from '../../components/ScreenWrapper';
+import { Text } from '../../components/ui/text';
+import { Input } from '../../components/ui/input';
+import { Button } from '../../components/ui/button';
+import { Switch } from '../../components/ui/switch';
+
+// 🌟 Componentes RNR para Diálogos y Alertas
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter } from '../../components/ui/alert-dialog';
+import AudioCard from '../../components/AudioCard';
 
 const logoMedalla = require('../../../assets/favicon.png');
 
-// 🌟 Actualizamos la interfaz para recibir los nuevos datos
 interface ReadingRequest {
   id: number;
   title: string;
@@ -31,15 +42,17 @@ export default function ReaderHistory({ navigation }: any) {
   const [isLoading, setIsLoading] = useState(true);
   const [playingId, setPlayingId] = useState<string | null>(null);
 
+  // Estados para Modales
   const [isEditModalVisible, setEditModalVisible] = useState(false);
   const [editingRequest, setEditingRequest] = useState<ReadingRequest | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editText, setEditText] = useState('');
   const [editIsPublic, setEditIsPublic] = useState(false);
 
-  // 🌟 Estados para el Modal de Perfil
   const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
   const [publicProfileData, setPublicProfileData] = useState<any>(null);
+
+  const [requestToDelete, setRequestToDelete] = useState<number | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -53,26 +66,25 @@ export default function ReaderHistory({ navigation }: any) {
       const response = await api.get('/my-reading-requests');
       setRequests(response.data.data);
     } catch (error) {
-      Alert.alert('Error', 'No se pudo cargar tu historial.');
+      Toast.show({ type: 'error', text1: 'Error', text2: 'No se pudo cargar tu historial.' });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDelete = (id: number) => {
-    Alert.alert("Eliminar pedido", "¿Estás seguro de que querés borrar esta solicitud?", [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Eliminar", style: "destructive", onPress: async () => {
-          try {
-            await api.delete(`/reading-requests/${id}`);
-            Toast.show({ type: 'success', text1: 'Éxito', text2: 'Pedido eliminado.', position: 'bottom', visibilityTime: 7000});
-            fetchMyRequests(); 
-          } catch (error: any) {
-            Toast.show({ type: 'error', text1: 'Error al eliminar', text2: error.response?.data?.message || 'No se pudo eliminar.' });
-          }
-        }
-      }
-    ]);
+  const confirmDelete = (id: number) => setRequestToDelete(id);
+
+  const executeDelete = async () => {
+    if (!requestToDelete) return;
+    try {
+      await api.delete(`/reading-requests/${requestToDelete}`);
+      Toast.show({ type: 'success', text1: 'Éxito', text2: 'Pedido eliminado.', visibilityTime: 4000 });
+      fetchMyRequests(); 
+    } catch (error: any) {
+      Toast.show({ type: 'error', text1: 'Error al eliminar', text2: error.response?.data?.message || 'No se pudo eliminar.' });
+    } finally {
+      setRequestToDelete(null);
+    }
   };
 
   const openEditModal = (item: ReadingRequest) => {
@@ -93,322 +105,148 @@ export default function ReaderHistory({ navigation }: any) {
       });
       setEditModalVisible(false);
       fetchMyRequests();
+      Toast.show({ type: 'success', text1: 'Pedido actualizado', text2: 'Tus cambios fueron guardados.' });
     } catch (error: any) {
       Toast.show({ type: 'error', text1: 'Error al editar', text2: error.response?.data?.message || 'No se pudo editar.' });
     }
   };
 
-  // 🌟 Función para abrir el perfil del voluntario
   const showVolunteerProfile = async (volunteerId: number) => {
     try {
       const response = await api.get(`/volunteer/${volunteerId}/public-stats`);
       setPublicProfileData(response.data);
       setIsProfileModalVisible(true);
     } catch (error) {
-      Toast.show({ type: 'error', text1: 'Error', text2: 'No se pudo cargar el perfil del voluntario.', position: 'bottom' });
+      Toast.show({ type: 'error', text1: 'Error', text2: 'No se pudo cargar el perfil del voluntario.' });
     }
   };
 
-  const renderItem = ({ item }: { item: ReadingRequest }) => {
-    const isCompleted = item.status === 'completed' && item.audio_path;
-    const isPending = item.status === 'pending';
-    const isValidating = item.status === 'validating';
-
-    return (
-      <View style={[styles.card, isCompleted ? styles.cardCompleted : styles.cardPending]}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>{item.title}</Text>
-          <View style={styles.badgesRow}>
-            <View style={[styles.statusBadge, isCompleted ? styles.badgeSuccess : (isValidating ? styles.badgeValidating : styles.badgePending)]}>
-              <Text style={styles.statusText}>
-                {isCompleted ? 'LISTO' : (isValidating ? 'EVALUANDO' : 'EN ESPERA')}
-              </Text>
-            </View>
-            
-            <View style={[styles.privacyBadge, item.is_public ? styles.badgePublic : styles.badgePrivate]}>
-              <Text style={styles.privacyText}>
-                {item.is_public ? '👁️ Público' : '🔒 Privado'}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* 🌟 Información de Autor y Voz */}
-        {item.author && <Text style={styles.metaText}>✍️ Autor: {item.author}</Text>}
-      
-        {item.reader && (
-          item.reader_id ? (
-            <TouchableOpacity 
-              onPress={() => showVolunteerProfile(item.reader_id!)}
-              accessible={true}
-              accessibilityRole="button"
-              style={{ marginBottom: 4 }}
-            >
-              <Text style={[styles.volunteerName, { color: Theme.colors.primary, textDecorationLine: 'underline' }]}>
-                🎙️ Voz: {item.reader}{' '}
-                {item.reader_stars ? (
-                  <Text>
-                    (<Ionicons name="star" size={14} color="#FFD700" /> {item.reader_stars})
-                  </Text>
-                ) : (
-                  '(Nuevo)'
-                )}
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <Text style={[styles.volunteerName, { marginBottom: 4 }]} accessible={true}>
-              🎙️ Voz: {item.reader}
-            </Text>
-          )
-        )}
-
-        {/* 🌟 Fecha de solicitud/creación */}
-        {item.created_at && (
-          <Text style={styles.cardDate}>
-            Añadido el {new Date(item.created_at).toLocaleDateString()}
-          </Text>
-        )}
-
-        {isCompleted ? (
-          <>
-            <View style={styles.playerContainer}>
-              <AudioPlayer 
-                audioUrl={`${SERVER_URL}/storage/${item.audio_path}`} 
-                id={item.id.toString()} 
-                activeId={playingId} 
-                onPlay={(id) => setPlayingId(String(id))}
-              />
-            </View>
-            {/* 🌟 Botones de valoración */}
-            {item.reader_id && !item.has_voted && (
-              <RatingButtons volunteerId={item.reader_id} audioId={item.id.toString()} />
-            )}
-          </>
-        ) : (
-          <View>
-            <Text style={styles.pendingText}>{isValidating ? 'Un voluntario grabó esto. La IA lo está revisando.' : 'Aún no ha sido grabado por un voluntario.'}</Text>
-            {isPending && (
-              <View style={styles.actionButtonsRow}>
-                <TouchableOpacity onPress={() => openEditModal(item)} style={styles.editBtn}>
-                  <Text style={styles.actionTextBtn}>✏️ Editar</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleDelete(item.id)} style={styles.deleteBtn}>
-                  <Text style={[styles.actionTextBtn, {color: Theme.colors.danger}]}>🗑️ Borrar</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        )}
-      </View>
-    );
-  };
-
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerBrand}>
-          <Image source={logoMedalla} style={styles.headerLogo} />
-          <Text style={styles.title}>Mis Audios</Text>
+    <ScreenWrapper withBottomInsets={false}>
+      
+      {/* HEADER FIJO */}
+      <View className="px-6 pt-4 pb-4 border-b border-border bg-background/90 z-10">
+        <View className="flex-row items-center">
+          <Image source={logoMedalla} className="w-9 h-9 mr-3 rounded-lg shadow-sm" importantForAccessibility="no" />
+          <Text className="text-3xl font-extrabold tracking-tight text-foreground" accessibilityRole="header">Mis Audios</Text>
         </View>
       </View>
       
+      {/* CONTENIDO PRINCIPAL */}
       {isLoading ? (
-        <ActivityIndicator size="large" color={Theme.colors.primary} style={{ marginTop: 50 }} />
+        <View className="flex-1 justify-center items-center">
+          <ActivityIndicator size="large" color="#0F172A" />
+        </View>
       ) : requests.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>Todavía no tenés pedidos. ¡Aprovechá para pedir tu primera lectura!</Text>
+        <View className="flex-1 justify-center items-center px-8">
+          <View className="bg-primary/5 w-32 h-32 rounded-full items-center justify-center mb-6 border border-primary/10">
+            <Ionicons name="headset-outline" size={64} color="#1D4ED8" />
+          </View>
+          <Text className="text-2xl font-bold text-foreground mb-2 text-center">Sin pedidos aún</Text>
+          <Text className="text-base text-muted-foreground text-center leading-relaxed">
+            Tu biblioteca está vacía. ¡Andá a la pestaña de "Nuevo Pedido" para pedir tu primera lectura!
+          </Text>
         </View>
       ) : (
         <FlatList
           data={requests}
           keyExtractor={(item) => item.id.toString()}
-          renderItem={renderItem}
-          contentContainerStyle={{ paddingBottom: 40 }}
+          renderItem={({ item }) => (
+            <AudioCard 
+              item={item} 
+              context="history" 
+              playingId={playingId} 
+              setPlayingId={setPlayingId} 
+              onShowProfile={showVolunteerProfile}
+              onEditHistory={openEditModal}  
+              onDeleteHistory={confirmDelete} 
+            />
+          )}
+          contentContainerStyle={{ paddingBottom: 80, paddingHorizontal: 20, paddingVertical: 24 }}
           showsVerticalScrollIndicator={false}
         />
       )}
 
-      {/* Modal de edición */}
-      <Modal visible={isEditModalVisible} animationType="slide" transparent={true}>
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
-          style={styles.modalOverlay}
-        >
-          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Editar Pedido</Text>
-              
-              <Text style={styles.label}>Título</Text>
-              <TextInput style={styles.input} value={editTitle} onChangeText={setEditTitle} />
-              
-              <Text style={styles.label}>Texto a leer</Text>
-              <TextInput style={[styles.input, styles.textArea]} value={editText} onChangeText={setEditText} multiline numberOfLines={4} />
-              
-              <View style={styles.modalSwitchContainer}>
-                <Text style={styles.label}>Compartir en el Catálogo Público</Text>
-                <Switch
-                  trackColor={{ false: Theme.colors.border, true: Theme.colors.success }}
-                  thumbColor="#FFF"
-                  onValueChange={setEditIsPublic}
-                  value={editIsPublic}
-                />
-              </View>
-
-              <View style={styles.modalButtons}>
-                <TouchableOpacity onPress={() => setEditModalVisible(false)} style={styles.cancelModalBtn}><Text style={styles.cancelText}>Cancelar</Text></TouchableOpacity>
-                <TouchableOpacity onPress={saveEdit} style={styles.saveModalBtn}><Text style={styles.saveText}>Guardar</Text></TouchableOpacity>
-              </View>
+      {/* 🌟 1. ALERT DIALOG (Eliminar) */}
+      <AlertDialog open={!!requestToDelete} onOpenChange={(open) => !open && setRequestToDelete(null)}>
+        <AlertDialogContent className="w-[90%] mx-auto bg-card rounded-[32px] p-6 border border-border shadow-2xl">
+          <AlertDialogHeader className="items-center mb-2">
+            <View className="bg-red-100 w-16 h-16 rounded-full items-center justify-center mb-4">
+              <Ionicons name="warning" size={32} color="#DC2626" />
             </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
+            <AlertDialogTitle className="text-2xl font-bold text-foreground text-center">¿Eliminar pedido?</AlertDialogTitle>
+            <AlertDialogDescription className="text-base text-muted-foreground mt-2 leading-relaxed text-center">
+              Esta acción no se puede deshacer. Se borrará permanentemente de tu historial.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col gap-3 mt-6">
+            <Button variant="destructive" size="lg" className="rounded-xl w-full" onPress={executeDelete}>
+              <Text className="text-destructive-foreground font-bold text-center w-full">Sí, eliminar definitivamente</Text>
+            </Button>
+            <Button variant="outline" size="lg" className="rounded-xl w-full" onPress={() => setRequestToDelete(null)}>
+              <Text className="font-bold text-center w-full text-foreground">Cancelar</Text>
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-      {/* 🌟 Modal del Perfil Público del Narrador */}
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={isProfileModalVisible}
-        onRequestClose={() => setIsProfileModalVisible(false)} 
-        accessibilityViewIsModal={true} 
-      >
-        <View style={styles.profileModalOverlay}>
-          <View style={styles.profileModalContent}>
-            
-            {publicProfileData ? (
-              <>
-                <View style={styles.profileModalHeader}>
-                  <View style={styles.profileModalIconContainer}>
-                    <Ionicons name="person-circle" size={60} color={Theme.colors.primary} />
-                  </View>
-                  <Text style={styles.profileModalName} accessibilityRole="header">
-                    {publicProfileData.name}
-                  </Text>
-                  <Text style={styles.profileModalSubtitle}>Narrador Voluntario</Text>
+      {/* 🌟 2. DIALOG (Editar Pedido) */}
+      <Dialog open={isEditModalVisible} onOpenChange={setEditModalVisible}>
+        <DialogContent className="w-[92%] mx-auto bg-card rounded-[32px] p-6 border border-border shadow-2xl">
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <DialogHeader className="mb-6">
+                <DialogTitle className="text-2xl font-extrabold text-foreground">Editar Pedido</DialogTitle>
+                <DialogDescription className="hidden">Formulario de edición</DialogDescription>
+              </DialogHeader>
+              
+              <View className="gap-5">
+                <View className="gap-2">
+                  <Text className="text-sm font-bold text-neutral-700 ml-1">Título</Text>
+                  <Input value={editTitle} onChangeText={setEditTitle} className="rounded-2xl h-14 px-4 bg-secondary/30 border border-gray-300 focus:border-primary" />
                 </View>
-
-                <View style={styles.profileModalStatsContainer}>
-                  <View style={styles.profileModalStatBox}>
-                    <Text style={styles.profileModalStatNumber}>{publicProfileData.public_audios}</Text>
-                    <Text style={styles.profileModalStatLabel}>Públicos</Text>
-                  </View>
-
-                  <View style={styles.profileModalStatBox}>
-                    <Text style={styles.profileModalStatNumber}>{publicProfileData.private_audios}</Text>
-                    <Text style={styles.profileModalStatLabel}>Privados</Text>
-                  </View>
-
-                  <View style={styles.profileModalStatBox}>
-                    <Text style={styles.profileModalStatNumber}>
-                      {publicProfileData.stars ? publicProfileData.stars : '--'}
-                      {publicProfileData.stars && <Ionicons name="star" size={14} color="#FFD700" style={{ marginLeft: 2 }} />}
-                    </Text>
-                    <Text style={styles.profileModalStatLabel}>Estrellas</Text>
-                  </View>
-                </View>
-
-                <Text style={styles.profileModalBadgesTitle} accessibilityRole="header">Logros Destacados</Text>
                 
-                {publicProfileData.badges && publicProfileData.badges.length > 0 ? (
-                  <View style={styles.profileModalBadgesList}>
-                    {publicProfileData.badges.map((badgeName: string, index: number) => (
-                      <View key={index} style={styles.profileModalBadgeItem}>
-                        <Ionicons name="medal" size={20} color="#FFD700" style={{ marginRight: 10 }} />
-                        <Text style={styles.profileModalBadgeText}>{badgeName}</Text>
-                      </View>
-                    ))}
+                <View className="gap-2">
+                  <Text className="text-sm font-bold text-neutral-700 ml-1">Texto a leer</Text>
+                  <Input 
+                    className="pt-4 rounded-2xl px-4 bg-secondary/30 border border-gray-300 focus:border-primary"
+                    style={{ height: 120 }}
+                    value={editText} 
+                    onChangeText={setEditText} 
+                    multiline 
+                    numberOfLines={4} 
+                    textAlignVertical="top" 
+                  />
+                </View>
+                
+                <View className="flex-row items-center justify-between bg-secondary/40 p-5 rounded-2xl mt-2 border border-gray-300">
+                  <View className="flex-1 pr-4">
+                    <Text className="text-base font-bold text-foreground">Catálogo Público</Text>
+                    <Text className="text-xs text-muted-foreground mt-0.5">Permite a otros escuchar esto.</Text>
                   </View>
-                ) : (
-                  <Text style={styles.profileModalEmptyText}>Este voluntario aún no ha desbloqueado medallas.</Text>
-                )}
-              </>
-            ) : (
-              <ActivityIndicator size="large" color={Theme.colors.primary} style={{ marginVertical: 30 }} />
-            )}
+                  <Switch checked={editIsPublic} onCheckedChange={setEditIsPublic} />
+                </View>
+              </View>
 
-            <TouchableOpacity 
-              style={styles.profileModalCloseBtn} 
-              onPress={() => setIsProfileModalVisible(false)}
-            >
-              <Text style={styles.profileModalCloseText}>Cerrar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+              <View className="flex-col gap-3 mt-8">
+                <Button size="lg" className="rounded-xl w-full" onPress={saveEdit}>
+                  <Text className="text-primary-foreground font-extrabold text-center w-full">Guardar Cambios</Text>
+                </Button>
+                <Button variant="ghost" size="lg" className="rounded-xl w-full border border-gray-300" onPress={() => setEditModalVisible(false)}>
+                  <Text className="font-bold text-center w-full text-muted-foreground">Cancelar</Text>
+                </Button>
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </DialogContent>
+      </Dialog>
 
-    </View>
+      <VolunteerProfileModal 
+        visible={isProfileModalVisible} 
+        onClose={setIsProfileModalVisible} 
+        profileData={publicProfileData} 
+      />
+
+    </ScreenWrapper>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Theme.colors.background, paddingHorizontal: Theme.spacing.padding, paddingTop: Theme.spacing.padding },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: Theme.colors.border },
-  headerBrand: { flexDirection: 'row', alignItems: 'center' },
-  headerLogo: { width: 36, height: 36, marginRight: 12 },
-  title: { fontSize: Theme.text.fontSizeHeader, fontWeight: 'bold', color: Theme.colors.primary },
-  
-  card: { backgroundColor: Theme.colors.backgroundCard, padding: 20, borderRadius: Theme.spacing.borderRadiusCard, marginBottom: 16, borderWidth: 1, elevation: 1 },
-  cardCompleted: { borderColor: Theme.colors.success },
-  cardPending: { borderColor: Theme.colors.border },
-  cardHeader: { marginBottom: 16 },
-  cardTitle: { fontSize: Theme.text.fontSizeTitle, fontWeight: 'bold', color: Theme.colors.text, marginBottom: 8 },
-  
-  badgesRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  badgeSuccess: { backgroundColor: '#E8F5E9' }, 
-  badgePending: { backgroundColor: '#E9ECEF' }, 
-  badgeValidating: { backgroundColor: '#FFF3E0' }, 
-  statusText: { fontSize: 12, fontWeight: 'bold', color: Theme.colors.textMuted },
-  
-  privacyBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
-  badgePublic: { backgroundColor: '#E3F2FD', borderColor: '#90CAF9' },
-  badgePrivate: { backgroundColor: '#FAFAFA', borderColor: '#E0E0E0' },
-  privacyText: { fontSize: 12, fontWeight: 'bold', color: '#555' },
-
-  // 🌟 Nuevos estilos para metadatos
-  metaText: { fontSize: 14, color: '#555', marginBottom: 4, fontWeight: '500' },
-  volunteerName: { fontSize: 14, color: '#555', marginBottom: 4, fontWeight: '500' },
-  cardDate: { fontSize: 12, color: Theme.colors.textMuted, marginBottom: 10, marginTop: 4 },
-  playerContainer: { marginTop: 10 },
-
-  pendingText: { fontSize: Theme.text.fontSizeBody, color: Theme.colors.textMuted, fontStyle: 'italic', marginBottom: 12 },
-  actionButtonsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 15, marginTop: 10 },
-  editBtn: { padding: 8 },
-  deleteBtn: { padding: 8 },
-  actionTextBtn: { fontWeight: 'bold', fontSize: Theme.text.fontSizeBody, color: Theme.colors.primary },
-  
-  emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyText: { fontSize: Theme.text.fontSizeBody, color: Theme.colors.textMuted, textAlign: 'center', paddingHorizontal: 20 },
-  
-  // Estilos del Modal de Edición
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
-  modalContent: { backgroundColor: Theme.colors.backgroundCard, padding: 20, borderRadius: 12 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', color: Theme.colors.primary, marginBottom: 15 },
-  label: { fontSize: 14, color: Theme.colors.textMuted, marginBottom: 5, fontWeight: 'bold' },
-  input: { backgroundColor: Theme.colors.background, borderWidth: 1, borderColor: Theme.colors.border, borderRadius: 8, padding: 12, marginBottom: 15, fontSize: 16 },
-  textArea: { height: 100, textAlignVertical: 'top' },
-  modalSwitchContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, marginTop: 5 },
-  modalButtons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 10 },
-  cancelModalBtn: { padding: 12 },
-  cancelText: { color: Theme.colors.textMuted, fontWeight: 'bold', fontSize: 16 },
-  saveModalBtn: { backgroundColor: Theme.colors.primary, padding: 12, borderRadius: 8 },
-  saveText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
-
-  // 🌟 Estilos del Modal de Perfil (Con nombres únicos para no chocar)
-  profileModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  profileModalContent: { width: '100%', backgroundColor: Theme.colors.backgroundCard, borderRadius: 20, padding: 24, elevation: 10 },
-  profileModalHeader: { alignItems: 'center', marginBottom: 20 },
-  profileModalIconContainer: { marginBottom: 10 },
-  profileModalName: { fontSize: 22, fontWeight: 'bold', color: Theme.colors.text, textAlign: 'center' },
-  profileModalSubtitle: { fontSize: 14, color: Theme.colors.textMuted, marginTop: 2 },
-  profileModalStatsContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 },
-  profileModalStatBox: { flex: 1, backgroundColor: Theme.colors.background, padding: 12, borderRadius: 12, alignItems: 'center', marginHorizontal: 4, borderWidth: 1, borderColor: Theme.colors.border },
-  profileModalStatNumber: { fontSize: 20, fontWeight: 'bold', color: Theme.colors.primary, flexDirection: 'row', alignItems: 'center' },
-  profileModalStatLabel: { fontSize: 12, color: Theme.colors.textMuted, marginTop: 4 },
-  profileModalBadgesTitle: { fontSize: 16, fontWeight: 'bold', color: Theme.colors.text, marginBottom: 15 },
-  profileModalBadgesList: { marginBottom: 10 },
-  profileModalBadgeItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF9E6', padding: 12, borderRadius: 10, marginBottom: 8, borderWidth: 1, borderColor: '#FFE8A1' },
-  profileModalBadgeText: { fontSize: 15, color: '#333', fontWeight: '500' },
-  profileModalEmptyText: { fontSize: 14, color: Theme.colors.textMuted, fontStyle: 'italic', textAlign: 'center', marginBottom: 20 },
-  profileModalCloseBtn: { backgroundColor: Theme.colors.border, padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 15 },
-  profileModalCloseText: { color: Theme.colors.text, fontSize: 16, fontWeight: 'bold' }
-});

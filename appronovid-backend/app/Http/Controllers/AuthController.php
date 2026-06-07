@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -141,5 +143,64 @@ class AuthController extends Controller
                 'token' => $token,
             ], 201);
         }
+    }
+
+    public function forgotPassword(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email|exists:users,email',
+        ], [
+            'email.exists' => 'No encontramos ninguna cuenta asociada a este correo.'
+        ]);
+
+        // Laravel genera el token y envía el mail automáticamente
+        $status = Password::sendResetLink(
+            $request->only('email')
+        );
+
+        if ($status === Password::RESET_LINK_SENT) {
+            return response()->json([
+                'message' => 'Revisá tu bandeja de entrada para restablecer tu clave.'
+            ], 200);
+        }
+
+        return response()->json([
+            'message' => 'Hubo un error al intentar enviar el correo. Intentá más tarde.'
+        ], 500);
+    }
+
+    /**
+     * 🌟 2. Guardar la nueva contraseña
+     */
+    public function resetPassword(Request $request)
+    {
+        $request->validate([
+            'token' => 'required',
+            'email' => 'required|email',
+            'password' => 'required|min:8|confirmed',
+        ]);
+
+        $status = Password::reset(
+            $request->only('email', 'password', 'password_confirmation', 'token'),
+            function ($user, $password) {
+                $user->forceFill([
+                    'password' => Hash::make($password)
+                ])->setRememberToken(Str::random(60));
+
+                $user->save();
+
+                event(new PasswordReset($user));
+            }
+        );
+
+        if ($status === Password::PASSWORD_RESET) {
+            return response()->json([
+                'message' => '¡Tu contraseña ha sido actualizada con éxito!'
+            ], 200);
+        }
+
+        return response()->json([
+            'message' => 'El enlace de recuperación es inválido o ha expirado.'
+        ], 400);
     }
 }

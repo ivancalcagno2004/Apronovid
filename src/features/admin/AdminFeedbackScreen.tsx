@@ -1,10 +1,19 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Alert, Image, Modal } from 'react-native';
+import { View, FlatList, ActivityIndicator, TouchableOpacity, Image } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
-import { Theme } from '../../styles/theme';
 import Toast from 'react-native-toast-message';
+import { cn } from '../../lib/utils';
+
+// 🌟 Componentes RNR Base
+import ScreenWrapper from '../../components/ScreenWrapper';
+import { Text } from '../../components/ui/text';
+import { Button } from '../../components/ui/button';
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter } from '../../components/ui/alert-dialog';
+
+// 🌟 Modal de Perfil Modularizado (¡Reutilizamos código!)
+import VolunteerProfileModal from '../../components/VolunteerProfileModal';
 
 const logoMedalla = require('../../../assets/favicon.png');
 
@@ -20,7 +29,6 @@ interface FeedbackItem {
     email: string;
     role: string;
   };
-  // 🌟 NUEVO: Datos del pedido original (solo viene cuando type === 'report')
   reported_request?: {
     id: number;
     title: string;
@@ -29,97 +37,113 @@ interface FeedbackItem {
   };
 }
 
-const FeedbackCard = React.memo(({ item, onDeleteFeedback, onRestore, onDeleteReq, onShowProfile }: any) => {
+const FeedbackCard = React.memo(({ item, onOpenAlert, onShowProfile }: any) => {
   const isBug = item.type === 'bug';
   const isSuggestion = item.type === 'suggestion';
   const isReport = item.type === 'report';
 
   return (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <View style={{ flex: 1, alignItems: 'flex-start' }}>
-          <View style={[styles.badge, isBug ? styles.bugBadge : isSuggestion ? styles.suggestionBadge : styles.reportBadge]}>
-            <Ionicons 
-              name={isBug ? "bug-outline" : isSuggestion ? "bulb-outline" : "warning-outline"} 
-              size={14} 
-              color={isBug ? Theme.colors.danger : isSuggestion ? '#E65100' : '#8E24AA'} 
-            />
-            <Text style={[styles.badgeText, isBug ? styles.bugText : isSuggestion ? styles.suggestionText : styles.reportText]}>
-              {isBug ? 'ERROR' : isSuggestion ? 'SUGERENCIA' : 'REPORTE DE PEDIDO'}
-            </Text>
-          </View>
+    <View className="bg-card p-5 rounded-[28px] mb-5 border border-border/60 shadow-lg shadow-black/5">
+      <View className="flex-row justify-between items-start mb-3">
+        
+        {/* 🌟 Badge de Tipo */}
+        <View className={cn(
+          "flex-row items-center px-3 py-1.5 rounded-full border shadow-sm", 
+          isBug ? "bg-red-50 border-red-200" : isSuggestion ? "bg-amber-50 border-amber-200" : "bg-purple-50 border-purple-200"
+        )}>
+          <Ionicons 
+            name={isBug ? "bug" : isSuggestion ? "bulb" : "warning"} 
+            size={14} 
+            color={isBug ? "#DC2626" : isSuggestion ? '#D97706' : '#9333EA'} 
+          />
+          <Text className={cn(
+            "text-[10px] font-extrabold ml-1.5 tracking-widest uppercase", 
+            isBug ? "text-red-700" : isSuggestion ? "text-amber-700" : "text-purple-700"
+          )}>
+            {isBug ? 'Error' : isSuggestion ? 'Sugerencia' : 'Reporte de Pedido'}
+          </Text>
         </View>
         
-        <View style={styles.rightHeaderAction}>
-          <Text style={styles.date}>{new Date(item.created_at).toLocaleDateString()}</Text>
-          
-          {/* Si es Feedback normal, mostramos el tacho de basura */}
+        <View className="flex-row items-center">
+          <Text className="text-xs font-bold text-muted-foreground mr-3">{new Date(item.created_at).toLocaleDateString()}</Text>
           {!isReport && (
-            <TouchableOpacity onPress={() => onDeleteFeedback(item)} style={styles.deleteButton}>
-              <Ionicons name="trash-outline" size={18} color={Theme.colors.danger} />
+            <TouchableOpacity 
+              onPress={() => onOpenAlert('delete_feedback', item)} 
+              className="w-8 h-8 bg-red-50 border border-red-100 rounded-full items-center justify-center" 
+              accessibilityRole="button"
+            >
+              <Ionicons name="trash" size={16} color="#DC2626" />
             </TouchableOpacity>
           )}
         </View>
       </View>
 
-      {/* 🌟 VISTA MEJORADA PARA REPORTES */}
       {isReport ? (
-        <View style={styles.reportContainer}>
-          <Text style={styles.reasonLabel}>Motivo del narrador:</Text>
-          <Text style={styles.messageText}>{item.message}</Text>
+        <View className="mb-1">
+          <Text className="text-sm font-extrabold text-purple-700 mb-1">Motivo del narrador:</Text>
+          <Text className="text-base text-foreground leading-relaxed mb-4 font-medium">{item.message}</Text>
           
-          {/* Caja de cita con el pedido original */}
           {item.reported_request && (
-            <View style={styles.quotedRequest}>
-              <View style={styles.quotedHeader}>
-                <Ionicons name="document-text-outline" size={16} color="#555" />
-                <Text style={styles.quotedTitle} numberOfLines={1}>{item.reported_request.title}</Text>
+            <View className="bg-secondary/30 border border-border/60 p-4 rounded-[20px] mb-4">
+              <View className="flex-row items-center mb-2">
+                <View className="bg-background p-1.5 rounded-lg border border-border mr-2">
+                  <Ionicons name="document-text" size={16} color="#64748B" />
+                </View>
+                <Text className="text-base font-extrabold text-foreground flex-1" numberOfLines={1}>{item.reported_request.title}</Text>
               </View>
-              <Text style={styles.quotedText} numberOfLines={3}>{item.reported_request.description_or_text}</Text>
+              <Text className="text-sm text-muted-foreground leading-relaxed italic" numberOfLines={3}>"{item.reported_request.description_or_text}"</Text>
               
-              <View style={styles.reportCountBadge}>
-                <Text style={styles.reportCountText}>
+              <View className="self-start bg-red-100/50 border border-red-200 px-2.5 py-1 rounded-md mt-3">
+                <Text className="text-xs text-red-700 font-extrabold uppercase tracking-wide">
                   Acumula {item.reported_request.report_count}/5 reportes
                 </Text>
               </View>
             </View>
           )}
 
-          <View style={styles.reportActionsContainer}>
-            <TouchableOpacity style={styles.restoreBtn} onPress={() => onRestore(item)}>
-              <Ionicons name="checkmark-circle-outline" size={18} color="#2E7D32" />
-              <Text style={styles.restoreBtnText}>Falso Reporte</Text>
+          <View className="flex-row justify-between gap-3 mt-2">
+            <TouchableOpacity 
+              className="flex-1 flex-row items-center justify-center bg-green-50 h-12 rounded-[16px] border border-green-200 shadow-sm" 
+              onPress={() => onOpenAlert('restore_request', item)}
+            >
+              <Ionicons name="checkmark-circle" size={18} color="#166534" />
+              <Text className="ml-1.5 color-green-800 font-extrabold text-[13px]">Falso Reporte</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.deleteReqBtn} onPress={() => onDeleteReq(item)}>
-              <Ionicons name="trash-outline" size={18} color={Theme.colors.danger} />
-              <Text style={styles.deleteReqBtnText}>Borrar Pedido</Text>
+            <TouchableOpacity 
+              className="flex-1 flex-row items-center justify-center bg-red-50 h-12 rounded-[16px] border border-red-200 shadow-sm" 
+              onPress={() => onOpenAlert('delete_request', item)}
+            >
+              <Ionicons name="trash" size={18} color="#DC2626" />
+              <Text className="ml-1.5 color-red-700 font-extrabold text-[13px]">Borrar Pedido</Text>
             </TouchableOpacity>
           </View>
         </View>
       ) : (
-        <Text style={styles.messageText}>{item.message}</Text>
+        <Text className="text-base text-foreground font-medium leading-relaxed mb-4">{item.message}</Text>
       )}
 
-      {/* 🌟 FOOTER CON EL LINK AL PERFIL DEL NARRADOR */}
-      <View style={styles.cardFooter}>
-        <Ionicons name="person-outline" size={18} color={Theme.colors.textMuted} style={styles.footerIcon} />
-        <View style={styles.userInfoContainer}>
+      {/* 🌟 FOOTER USUARIO */}
+      <View className="flex-row items-center border-t border-border/60 pt-4 mt-2">
+        <View className="w-10 h-10 bg-secondary rounded-full items-center justify-center mr-3 border border-border/50">
+          <Ionicons name="person" size={18} color="#64748B" />
+        </View>
+        <View className="flex-1">
           {item.user ? (
             <>
               {item.user.role === 'narrador' ? (
                 <TouchableOpacity onPress={() => onShowProfile(item.user.id)} accessibilityRole="button">
-                  <Text style={[styles.userName, styles.narratorLink]}>
+                  <Text className="text-sm font-extrabold color-primary underline">
                     {item.user.name}
                   </Text>
                 </TouchableOpacity>
               ) : (
-                <Text style={styles.userName}>{item.user.name}</Text>
+                <Text className="text-sm font-extrabold text-foreground">{item.user.name}</Text>
               )}
-              <Text style={styles.userEmail}>{item.user.email}</Text>
+              <Text className="text-[13px] font-medium text-muted-foreground flex-wrap mt-0.5">{item.user.email}</Text>
             </>
           ) : (
-            <Text style={styles.userName}>Usuario desconocido</Text>
+            <Text className="text-sm font-extrabold text-foreground">Usuario anónimo</Text>
           )}
         </View>
       </View>
@@ -130,8 +154,17 @@ const FeedbackCard = React.memo(({ item, onDeleteFeedback, onRestore, onDeleteRe
 export default function AdminFeedBackScreen() {
   const [reports, setReports] = useState<FeedbackItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Perfil Modal State
   const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
   const [publicProfileData, setPublicProfileData] = useState<any>(null);
+
+  // 🌟 RNR Alert Dialog State
+  const [alertConfig, setAlertConfig] = useState<{
+    visible: boolean;
+    type: 'delete_feedback' | 'restore_request' | 'delete_request' | null;
+    item: FeedbackItem | null;
+  }>({ visible: false, type: null, item: null });
 
   const fetchFeedback = async () => {
     try {
@@ -151,49 +184,41 @@ export default function AdminFeedBackScreen() {
     }, [])
   );
 
-  const handleDeleteFeedback = useCallback((item: FeedbackItem) => {
-    Alert.alert("Eliminar Mensaje", `¿Borrar este mensaje del buzón?`, [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Eliminar", style: "destructive", onPress: async () => {
-          try {
-            await api.delete(`/admin/feedback/${item.real_id}`);
-            Toast.show({ type: 'success', text1: 'Eliminado', text2: 'El mensaje fue removido.', position: 'bottom' });
-            setReports(prev => prev.filter(r => r.id !== item.id));
-          } catch (error) { Toast.show({ type: 'error', text1: 'Error', position: 'bottom' }); }
-        } 
-      }
-    ]);
+  const openAlert = useCallback((type: 'delete_feedback' | 'restore_request' | 'delete_request', item: FeedbackItem) => {
+    setAlertConfig({ visible: true, type, item });
   }, []);
 
-  const handleRestoreRequest = useCallback(async (item: FeedbackItem) => {
-    Alert.alert("Ignorar Reporte", `¿Eliminar este reporte (el pedido seguirá visible)?`, [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Confirmar", onPress: async () => {
-          try {
-            // Borramos solo el reporte
-            await api.delete(`/admin/feedback/${item.real_id}`);
-            Toast.show({ type: 'success', text1: 'Reporte ignorado', position: 'bottom' });
-            setReports(prev => prev.filter(r => r.id !== item.id));
-          } catch (error) { Toast.show({ type: 'error', text1: 'Error', position: 'bottom' }); }
-        }
-      }
-    ]);
-  }, []);
+  const closeAlert = () => {
+    setAlertConfig(prev => ({ ...prev, visible: false }));
+  };
 
-  const handleDeleteRequest = useCallback((item: FeedbackItem) => {
-    Alert.alert("Eliminar Pedido Definitivamente", `Se borrará el pedido de la base de datos para todos.`, [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Eliminar Pedido", style: "destructive", onPress: async () => {
-          try {
-            // Borramos el pedido completo (esto debería eliminar sus reportes en cascada en el backend)
-            await api.delete(`/admin/reported-requests/${item.reported_request?.id}`);
-            Toast.show({ type: 'success', text1: 'Pedido eliminado', position: 'bottom' });
-            fetchFeedback(); 
-          } catch (error) { Toast.show({ type: 'error', text1: 'Error', position: 'bottom' }); }
-        } 
+  // 🌟 Ejecutor centralizado de acciones
+  const executeAlertAction = async () => {
+    const { type, item } = alertConfig;
+    if (!item) return;
+
+    closeAlert();
+
+    try {
+      if (type === 'delete_feedback') {
+        await api.delete(`/admin/feedback/${item.real_id}`);
+        Toast.show({ type: 'success', text1: 'Eliminado', text2: 'El mensaje fue removido del buzón.', position: 'bottom' });
+        setReports(prev => prev.filter(r => r.id !== item.id));
+      } 
+      else if (type === 'restore_request') {
+        await api.delete(`/admin/feedback/${item.real_id}`);
+        Toast.show({ type: 'success', text1: 'Reporte ignorado', text2: 'El pedido seguirá visible en el muro.', position: 'bottom' });
+        setReports(prev => prev.filter(r => r.id !== item.id));
+      } 
+      else if (type === 'delete_request') {
+        await api.delete(`/admin/reported-requests/${item.reported_request?.id}`);
+        Toast.show({ type: 'success', text1: 'Pedido eliminado', text2: 'Se borró el pedido de la plataforma.', position: 'bottom' });
+        fetchFeedback(); 
       }
-    ]);
-  }, []);
+    } catch (error) {
+      Toast.show({ type: 'error', text1: 'Error', text2: 'No se pudo completar la acción.', position: 'bottom' });
+    }
+  };
 
   const showVolunteerProfile = useCallback(async (volunteerId: number) => {
     try {
@@ -210,158 +235,100 @@ export default function AdminFeedBackScreen() {
   const renderItem = useCallback(({ item }: { item: FeedbackItem }) => (
     <FeedbackCard 
       item={item} 
-      onDeleteFeedback={handleDeleteFeedback}
-      onRestore={handleRestoreRequest}
-      onDeleteReq={handleDeleteRequest}
+      onOpenAlert={openAlert}
       onShowProfile={showVolunteerProfile}
     />
-  ), [handleDeleteFeedback, handleRestoreRequest, handleDeleteRequest, showVolunteerProfile]);
+  ), [openAlert, showVolunteerProfile]);
+
+  // Textos dinámicos para el AlertDialog
+  const getAlertContent = () => {
+    switch (alertConfig.type) {
+      case 'delete_feedback':
+        return { title: '¿Eliminar Mensaje?', desc: 'El mensaje desaparecerá de este buzón. Esta acción no se puede deshacer.', confirmText: 'Sí, eliminar', isDestructive: true };
+      case 'restore_request':
+        return { title: '¿Ignorar Reporte?', desc: 'Se eliminará este reporte y el pedido volverá a estar disponible para todos los voluntarios.', confirmText: 'Ignorar reporte', isDestructive: false };
+      case 'delete_request':
+        return { title: '¿Eliminar Pedido?', desc: `Se borrará "${alertConfig.item?.reported_request?.title}" de la base de datos definitivamente.`, confirmText: 'Eliminar pedido', isDestructive: true };
+      default:
+        return { title: '', desc: '', confirmText: '', isDestructive: false };
+    }
+  };
+
+  const alertContent = getAlertContent();
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerBrand}>
-            <Image source={logoMedalla} style={styles.headerLogo} />
-            <Text style={styles.mainTitle} accessibilityRole="header">Buzón de Reportes</Text>
+    <ScreenWrapper withBottomInsets={false}>
+      
+      {/* 🌟 HEADER FIJO */}
+      <View className="px-6 pt-4 pb-4 bg-background/90 z-10 border-b border-border/60">
+        <View className="flex-row items-center">
+            <Image source={logoMedalla} className="w-9 h-9 mr-3 rounded-lg shadow-sm" />
+            <Text className="text-3xl font-extrabold tracking-tight text-foreground" accessibilityRole="header">Reportes</Text>
         </View>
-        <Text style={styles.subtitle}>Sugerencias y errores enviados por la comunidad.</Text>
+        <Text className="text-base text-muted-foreground mt-1 font-medium">Buzón de sugerencias y revisión comunitaria</Text>
       </View>
 
       {isLoading && reports.length === 0 ? (
-        <ActivityIndicator size="large" color={Theme.colors.primary} style={{ marginTop: 50 }} />
+        <View className="flex-1 justify-center items-center">
+          <ActivityIndicator size="large" color="#0F172A" />
+        </View>
       ) : (
         <FlatList
           data={reports}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={{ paddingBottom: 80, paddingHorizontal: 20, paddingTop: 24 }}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Ionicons name="mail-open-outline" size={60} color={Theme.colors.textMuted} />
-              <Text style={styles.emptyText}>El buzón de reportes está vacío.</Text>
+            /* 🌟 ESTADO VACÍO ILUSTRADO */
+            <View className="flex-1 justify-center items-center px-8 mt-16">
+              <View className="bg-primary/5 w-32 h-32 rounded-full items-center justify-center mb-6 border border-primary/10">
+                <Ionicons name="mail-open" size={64} color="#1D4ED8" />
+              </View>
+              <Text className="text-2xl font-bold text-foreground mb-2 text-center">Buzón Limpio</Text>
+              <Text className="text-base text-muted-foreground text-center leading-relaxed">
+                No hay reportes ni sugerencias pendientes por revisar en este momento.
+              </Text>
             </View>
           }
         />
       )}
 
-      {/* MODAL DEL PERFIL PÚBLICO (Sin cambios visuales) */}
-      <Modal animationType="fade" transparent={true} visible={isProfileModalVisible} onRequestClose={() => setIsProfileModalVisible(false)}>
-        <View style={styles.profileModalOverlay}>
-          <View style={styles.profileModalContent}>
-            {publicProfileData ? (
-              <>
-                <View style={styles.profileModalHeader}>
-                  <View style={styles.profileModalIconContainer}><Ionicons name="person-circle" size={60} color={Theme.colors.primary} /></View>
-                  <Text style={styles.profileModalName}>{publicProfileData.name}</Text>
-                  <Text style={styles.profileModalSubtitle}>Narrador Voluntario</Text>
-                </View>
+      {/* 🌟 DIALOG ÉPICO DE RNR (Perfil Público Reutilizado) */}
+      <VolunteerProfileModal 
+        visible={isProfileModalVisible} 
+        onClose={() => setIsProfileModalVisible(false)} 
+        profileData={publicProfileData} 
+      />
 
-                <View style={styles.profileModalStatsContainer}>
-                  <View style={styles.profileModalStatBox}>
-                    <Text style={styles.profileModalStatNumber}>{publicProfileData.public_audios}</Text>
-                    <Text style={styles.profileModalStatLabel}>Públicos</Text>
-                  </View>
-                  <View style={styles.profileModalStatBox}>
-                    <Text style={styles.profileModalStatNumber}>{publicProfileData.private_audios}</Text>
-                    <Text style={styles.profileModalStatLabel}>Privados</Text>
-                  </View>
-                  <View style={styles.profileModalStatBox}>
-                    <Text style={styles.profileModalStatNumber}>{publicProfileData.stars ? publicProfileData.stars : '--'} {publicProfileData.stars && <Ionicons name="star" size={14} color="#FFD700" style={{ marginLeft: 2 }} />}</Text>
-                    <Text style={styles.profileModalStatLabel}>Estrellas</Text>
-                  </View>
-                </View>
+      {/* 🌟 ALERT DIALOG DINÁMICO RNR */}
+      <AlertDialog open={alertConfig.visible} onOpenChange={(open) => !open && closeAlert()}>
+        <AlertDialogContent className="w-[90%] mx-auto bg-card rounded-[32px] p-6 border border-border shadow-2xl">
+          <AlertDialogHeader className="items-center mb-2">
+            <View className={cn("w-16 h-16 rounded-full items-center justify-center mb-4", alertContent.isDestructive ? "bg-red-100" : "bg-blue-100")}>
+              <Ionicons name={alertContent.isDestructive ? "warning" : "information-circle"} size={32} color={alertContent.isDestructive ? "#DC2626" : "#1D4ED8"} />
+            </View>
+            <AlertDialogTitle className="text-2xl font-extrabold text-foreground text-center">{alertContent.title}</AlertDialogTitle>
+            <AlertDialogDescription className="text-base font-medium text-muted-foreground mt-2 leading-relaxed text-center">
+              {alertContent.desc}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col gap-3 mt-6">
+            <Button 
+                variant={alertContent.isDestructive ? "destructive" : "default"} 
+                size="lg" 
+                className="rounded-[16px] w-full h-14" 
+                onPress={executeAlertAction}
+            >
+              <Text className="text-white font-extrabold text-center w-full text-lg">{alertContent.confirmText}</Text>
+            </Button>
+            <Button variant="outline" size="lg" className="rounded-[16px] w-full h-14 border-border/80" onPress={closeAlert}>
+              <Text className="font-extrabold text-center w-full text-foreground text-lg">Cancelar</Text>
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-                <Text style={styles.profileModalBadgesTitle}>Logros Destacados</Text>
-                {publicProfileData.badges && publicProfileData.badges.length > 0 ? (
-                  <View style={styles.profileModalBadgesList}>
-                    {publicProfileData.badges.map((badgeName: string, index: number) => (
-                      <View key={index} style={styles.profileModalBadgeItem}>
-                        <Ionicons name="medal" size={20} color="#FFD700" style={{ marginRight: 10 }} />
-                        <Text style={styles.profileModalBadgeText}>{badgeName}</Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : (
-                  <Text style={styles.profileModalEmptyText}>Este voluntario aún no ha desbloqueado medallas.</Text>
-                )}
-              </>
-            ) : <ActivityIndicator size="large" color={Theme.colors.primary} style={{ marginVertical: 30 }} />}
-            <TouchableOpacity style={styles.profileModalCloseBtn} onPress={() => setIsProfileModalVisible(false)}><Text style={styles.profileModalCloseText}>Cerrar</Text></TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    </View>
+    </ScreenWrapper>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Theme.colors.background, paddingTop: Theme.spacing.padding },
-  header: { marginBottom: 20, paddingHorizontal: Theme.spacing.padding, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: Theme.colors.border },
-  headerBrand: { flexDirection: 'row', alignItems: 'center' },
-  headerLogo: { width: 36, height: 36, marginRight: 12 },
-  mainTitle: { fontSize: Theme.text.fontSizeHeader, fontWeight: 'bold', color: Theme.colors.primary },
-  subtitle: { fontSize: Theme.text.fontSizeBody, color: Theme.colors.textMuted, marginTop: 5 },
-  listContent: { paddingBottom: 40, paddingHorizontal: Theme.spacing.padding },
-  card: { backgroundColor: Theme.colors.backgroundCard, padding: 16, borderRadius: Theme.spacing.borderRadiusCard, marginBottom: 14, borderWidth: 1, borderColor: Theme.colors.border, elevation: 1 },
-  
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  badge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  bugBadge: { backgroundColor: '#FFEBEE' },
-  suggestionBadge: { backgroundColor: '#FFF3E0' },
-  reportBadge: { backgroundColor: '#F3E5F5' },
-  badgeText: { fontSize: 11, fontWeight: 'bold', marginLeft: 4 },
-  bugText: { color: Theme.colors.danger },
-  suggestionText: { color: '#E65100' },
-  reportText: { color: '#8E24AA' },
-  
-  rightHeaderAction: { flexDirection: 'row', alignItems: 'center' },
-  date: { fontSize: 12, color: Theme.colors.textMuted, marginRight: 10 },
-  deleteButton: { padding: 6, backgroundColor: '#FFEBEE', borderRadius: 6 },
-  
-  // 🌟 ESTILOS DE LA NUEVA VISTA DE REPORTE
-  reportContainer: { marginBottom: 10 },
-  reasonLabel: { fontSize: 13, fontWeight: 'bold', color: '#8E24AA', marginBottom: 4 },
-  messageText: { fontSize: 15, color: Theme.colors.text, lineHeight: 22, marginBottom: 12 },
-  
-  quotedRequest: { backgroundColor: '#F8F9FA', borderLeftWidth: 4, borderLeftColor: '#8E24AA', padding: 12, borderRadius: 6, marginBottom: 16 },
-  quotedHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  quotedTitle: { fontSize: 14, fontWeight: 'bold', color: '#333', marginLeft: 6, flex: 1 },
-  quotedText: { fontSize: 13, color: '#666', lineHeight: 18, fontStyle: 'italic' },
-  reportCountBadge: { alignSelf: 'flex-start', backgroundColor: '#FFEBEE', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, marginTop: 10 },
-  reportCountText: { fontSize: 11, color: Theme.colors.danger, fontWeight: 'bold' },
-
-  reportActionsContainer: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
-  restoreBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#E8F5E9', paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: '#C8E6C9' },
-  restoreBtnText: { marginLeft: 6, color: '#2E7D32', fontWeight: 'bold', fontSize: 13 },
-  deleteReqBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFEBEE', paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: '#FFCDD2' },
-  deleteReqBtnText: { marginLeft: 6, color: Theme.colors.danger, fontWeight: 'bold', fontSize: 13 },
-
-  cardFooter: { flexDirection: 'row', alignItems: 'flex-start', borderTopWidth: 1, borderTopColor: Theme.colors.border, paddingTop: 12 },
-  footerIcon: { marginTop: 2, marginRight: 8 },
-  userInfoContainer: { flex: 1 },
-  userName: { fontSize: 14, fontWeight: '600', color: Theme.colors.text, marginBottom: 2 },
-  userEmail: { fontSize: 13, color: Theme.colors.textMuted, flexWrap: 'wrap' },
-  narratorLink: { color: Theme.colors.primary, textDecorationLine: 'underline' },
-  emptyState: { alignItems: 'center', justifyContent: 'center', marginTop: 100 },
-  emptyText: { fontSize: 16, color: Theme.colors.textMuted, marginTop: 15 },
-
-  // Estilos del modal (sin cambios)
-  profileModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  profileModalContent: { width: '100%', backgroundColor: Theme.colors.backgroundCard, borderRadius: 20, padding: 24, elevation: 10 },
-  profileModalHeader: { alignItems: 'center', marginBottom: 20 },
-  profileModalIconContainer: { marginBottom: 10 },
-  profileModalName: { fontSize: 22, fontWeight: 'bold', color: Theme.colors.text, textAlign: 'center' },
-  profileModalSubtitle: { fontSize: 14, color: Theme.colors.textMuted, marginTop: 2 },
-  profileModalStatsContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 },
-  profileModalStatBox: { flex: 1, backgroundColor: Theme.colors.background, padding: 12, borderRadius: 12, alignItems: 'center', marginHorizontal: 4, borderWidth: 1, borderColor: Theme.colors.border },
-  profileModalStatNumber: { fontSize: 20, fontWeight: 'bold', color: Theme.colors.primary, flexDirection: 'row', alignItems: 'center' },
-  profileModalStatLabel: { fontSize: 12, color: Theme.colors.textMuted, marginTop: 4 },
-  profileModalBadgesTitle: { fontSize: 16, fontWeight: 'bold', color: Theme.colors.text, marginBottom: 15 },
-  profileModalBadgesList: { marginBottom: 10 },
-  profileModalBadgeItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF9E6', padding: 12, borderRadius: 10, marginBottom: 8, borderWidth: 1, borderColor: '#FFE8A1' },
-  profileModalBadgeText: { fontSize: 15, color: '#333', fontWeight: '500' },
-  profileModalEmptyText: { fontSize: 14, color: Theme.colors.textMuted, fontStyle: 'italic', textAlign: 'center', marginBottom: 20 },
-  profileModalCloseBtn: { backgroundColor: Theme.colors.border, padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 15 },
-  profileModalCloseText: { color: Theme.colors.text, fontSize: 16, fontWeight: 'bold' }
-});
