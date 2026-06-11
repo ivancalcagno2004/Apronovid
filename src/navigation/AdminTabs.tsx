@@ -26,7 +26,7 @@ export default function AdminTabs() {
           else if (route.name === 'Perfil') iconName = focused ? 'person' : 'person-outline';
           return <Ionicons name={iconName} size={size + 4} color={color} />;
         },
-        tabBarActiveTintColor: '#2414D3', 
+        tabBarActiveTintColor: '#224BBC', 
         tabBarInactiveTintColor: '#9CA3AF', 
         tabBarStyle: {
           backgroundColor: '#FFFFFF',

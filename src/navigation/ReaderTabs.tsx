@@ -26,7 +26,7 @@ export default function ReaderTabs() {
           else if (route.name === 'Perfil') iconName = focused ? 'person' : 'person-outline';
           return <Ionicons name={iconName} size={size + 4} color={color} />;
         },
-        tabBarActiveTintColor: '#4338ca', 
+        tabBarActiveTintColor: '#224BBC', 
         tabBarInactiveTintColor: '#9CA3AF', 
         tabBarStyle: {
           backgroundColor: '#FFFFFF',

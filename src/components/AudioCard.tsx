@@ -246,7 +246,7 @@ export default function AudioCard({
             )}
           </Text>
 
-          <Text className="text-xs text-red-500 mt-2 font-bold uppercase tracking-wider" importantForAccessibility="no">
+          <Text className="text-[10px] text-red-800 mt-4 font-bold uppercase tracking-wider" importantForAccessibility="no">
             {item.ai_transcription.startsWith('Revisión Manual:') 
               ? 'Tené en cuenta esta corrección para la próxima.' 
               : 'Comparalo con el original para mejorar tu dicción.'}

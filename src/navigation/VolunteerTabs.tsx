@@ -24,7 +24,7 @@ export default function VolunteerTabs() {
           else if (route.name === 'Perfil') iconName = focused ? 'person' : 'person-outline';
           return <Ionicons name={iconName} size={size + 4} color={color} />;
         },
-        tabBarActiveTintColor: '#2414D3', // Equivalente a text-foreground
+        tabBarActiveTintColor: '#224BBC', // Equivalente a text-foreground
         tabBarInactiveTintColor: '#9CA3AF', // Equivalente a text-muted-foreground
         tabBarStyle: {
           backgroundColor: '#FFFFFF', // Equivalente a bg-card
