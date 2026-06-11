@@ -220,7 +220,7 @@ export default function CatalogScreen() {
       </View>
 
       {/* 🌟 Categorías (Filtros) */}
-      <View className="mb-4">
+      <View className="mb-2">
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24 }}>
           {categories.map((cat) => {
             const isSelected = selectedCategory === cat.id;

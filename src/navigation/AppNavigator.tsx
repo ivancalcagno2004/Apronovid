@@ -14,6 +14,7 @@ import VolunteerDashboard from '../features/volunteer/VolunteerDashboard';
 import ReaderTabs from './ReaderTabs'; 
 import AdminTabs from './AdminTabs';
 import DonationComponent from '../features/donations/DonationComponent';
+import VolunteerHelpScreen from '../features/volunteer/VolunteerHelpScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -41,14 +42,14 @@ export default function AppNavigator() {
           user.role === 'admin' ? (
             <>
               <Stack.Screen name="AdminHome" component={AdminTabs} options={{ headerShown: false }} />
-              <Stack.Screen name="Donation" component={DonationComponent} options={{ title: 'Donaciones', headerBackTitle: 'Volver', headerShown: true }} />
+              <Stack.Screen name="Donation" component={DonationComponent} options={{headerShown: false }} />
             </>
           ) : 
           user.role === 'oyente' ? (
           <>
             {/* El Oyente ahora entra directo a sus pestañas */}
             <Stack.Screen name="ReaderHome" component={ReaderTabs} options={{ headerShown: false }} />
-            <Stack.Screen name="Donation" component={DonationComponent} options={{ title: 'Donaciones', headerBackTitle: 'Volver', headerShown: true }} />
+            <Stack.Screen name="Donation" component={DonationComponent} options={{headerShown: false }} />
           </>
         ) : (
           <>
@@ -56,7 +57,8 @@ export default function AppNavigator() {
             <Stack.Screen name="VolunteerHome" component={VolunteerTabs} options={{ headerShown: false }} />
             {/* La grabadora se abre por encima */}
             <Stack.Screen name="VolunteerDashboard" component={VolunteerDashboard} options={{ headerShown: false }}/>
-            <Stack.Screen name="Donation" component={DonationComponent} options={{ title: 'Donaciones', headerBackTitle: 'Volver', headerShown: true }} />
+            <Stack.Screen name="Donation" component={DonationComponent} options={{ headerShown: false }} />
+            <Stack.Screen name="VolunteerHelp" component={VolunteerHelpScreen} options={{ headerShown: false }} />
           </>
         )
       )}

@@ -4,7 +4,7 @@ import { TextClassContext } from './text';
 import { cn } from '../../lib/utils';
 import * as AlertDialogPrimitive from '@rn-primitives/alert-dialog';
 import * as React from 'react';
-import { Platform, View, type ViewProps } from 'react-native';
+import { Platform, View, type ViewProps, Modal } from 'react-native'; // 🌟 Importamos Modal
 import { FadeIn, FadeOut } from 'react-native-reanimated';
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens';
 
@@ -14,7 +14,19 @@ const AlertDialogTrigger = AlertDialogPrimitive.Trigger;
 
 const AlertDialogPortal = AlertDialogPrimitive.Portal;
 
-const FullWindowOverlay = Platform.OS === 'ios' ? RNFullWindowOverlay : React.Fragment;
+// 🌟 SOLUCIÓN DEFINITIVA PARA TALKBACK EN ANDROID 🌟
+const AndroidModalWrapper = ({ children }: { children: React.ReactNode }) => (
+  <Modal
+    transparent
+    visible
+    animationType="none"
+    onRequestClose={() => {}}
+  >
+    {children}
+  </Modal>
+);
+
+const FullWindowOverlay = Platform.OS === 'ios' ? RNFullWindowOverlay : AndroidModalWrapper;
 
 function AlertDialogOverlay({
   className,
@@ -26,6 +38,8 @@ function AlertDialogOverlay({
   return (
     <FullWindowOverlay>
       <AlertDialogPrimitive.Overlay
+        accessibilityViewIsModal={true}
+        importantForAccessibility="yes"
         className={cn(
           'absolute bottom-0 left-0 right-0 top-0 z-50 flex items-center justify-center bg-black/50 p-2',
           Platform.select({
@@ -55,6 +69,8 @@ function AlertDialogContent({
     <AlertDialogPortal hostName={portalHost}>
       <AlertDialogOverlay>
         <AlertDialogPrimitive.Content
+          accessibilityViewIsModal={true}
+          importantForAccessibility="yes"
           className={cn(
             'bg-background border-border z-50 flex w-full max-w-[calc(100%-2rem)] flex-col gap-4 rounded-lg border p-6 shadow-lg shadow-black/5 sm:max-w-lg',
             Platform.select({

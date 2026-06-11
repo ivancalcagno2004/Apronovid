@@ -26,7 +26,7 @@ export default function AdminTabs() {
           else if (route.name === 'Perfil') iconName = focused ? 'person' : 'person-outline';
           return <Ionicons name={iconName} size={size + 4} color={color} />;
         },
-        tabBarActiveTintColor: '#000000', 
+        tabBarActiveTintColor: '#2414D3', 
         tabBarInactiveTintColor: '#9CA3AF', 
         tabBarStyle: {
           backgroundColor: '#FFFFFF',
@@ -34,10 +34,10 @@ export default function AdminTabs() {
           borderTopColor: '#E5E7EB',
           height: 60 + insets.bottom, 
           paddingBottom: insets.bottom > 0 ? insets.bottom : 10,
-          paddingTop: 10,
         },
         tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
         headerShown: false,
+        animation: 'shift',
       })}
     >
       <Tab.Screen name="Gestión" component={AdminDashboard} options={{ title: 'Gestión Catálogo' }} />

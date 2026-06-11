@@ -43,7 +43,6 @@ class FavoriteController extends Controller
                     'title' => $item->title,
                     'audio_path' => $item->audio_path,
                     'created_at' => $fav->created_at,
-                    'author' => 'Pedido de Oyente',
                     'reader' => $voluntario ? $voluntario->name : null,
                     'reader_id' => $item->voluntario_id,
                     'reader_stars' => $voluntario ? $voluntario->stars : null,

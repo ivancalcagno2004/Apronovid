@@ -1,6 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+// 🌟 LA MAGIA ESTÁ ACÁ: Importamos desde /legacy
+import * as FileSystem from 'expo-file-system/legacy'; 
+import * as Sharing from 'expo-sharing';
+import Toast from 'react-native-toast-message';
+
 import { SERVER_URL } from '../services/api';
 import AudioPlayer from '../features/utils/AudioPlayer';
 import RatingButtons from '../features/utils/RatingButtons';
@@ -34,7 +39,8 @@ export default function AudioCard({
   onEditHistory,
 }: AudioCardProps) {
 
-  // Lógicas de estado
+  const [isDownloading, setIsDownloading] = useState(false);
+
   const isVolunteerContext = context === 'volunteerRecordings';
   const hasAudio = !!item.audio_path;
   const isCompleted = context === 'history' ? (item.status === 'completed' && hasAudio) : true;
@@ -63,12 +69,55 @@ export default function AudioCard({
     return (context === 'history' && isCompleted) ? "border-green-500/30" : "border-border/60";
   };
 
+  // 🌟 FUNCIÓN ÉPICA DE DESCARGA
+  const handleDownload = async () => {
+    if (!item.audio_path) return;
+
+    try {
+      setIsDownloading(true);
+      Toast.show({ type: 'info', text1: 'Descargando...', text2: 'Preparando el archivo, aguardá un momento.', position: 'bottom', visibilityTime: 5000 });
+
+      const audioUrl = `${SERVER_URL}/storage/${item.audio_path.replace(/^\//, '')}`;
+      
+      const safeTitle = (displayTitle || 'audio').replace(/[^a-zA-Z0-9]/g, '_');
+      
+      // Ya no tira error de TypeScript porque estamos usando /legacy
+      if (!FileSystem.cacheDirectory) {
+        Toast.show({ type: 'error', text1: 'Error', text2: 'No se pudo acceder a la caché del teléfono.', position: 'bottom', visibilityTime: 5000 });
+        return;
+      }
+      
+      const fileUri = `${FileSystem.cacheDirectory}Apronovid_${safeTitle}.mp3`;
+
+      const downloadResumable = FileSystem.createDownloadResumable(audioUrl, fileUri);
+      const downloadRes = await downloadResumable.downloadAsync();
+
+      if (downloadRes && downloadRes.uri) {
+        const canShare = await Sharing.isAvailableAsync();
+        if (canShare) {
+          await Sharing.shareAsync(downloadRes.uri, {
+            mimeType: 'audio/mpeg',
+            dialogTitle: 'Guardar o Compartir Audio',
+            UTI: 'public.mp3' 
+          });
+        } else {
+          Toast.show({ type: 'error', text1: 'Error', text2: 'Tu dispositivo no soporta compartir archivos.', position: 'bottom', visibilityTime: 5000 });
+        }
+      } else {
+        Toast.show({ type: 'error', text1: 'Error', text2: 'No se pudo descargar el archivo.', position: 'bottom', visibilityTime: 5000 });
+      }
+    } catch (error) {
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Hubo un problema de conexión al descargar.', position: 'bottom', visibilityTime: 5000 });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
     <View className={cn("bg-card p-5 rounded-[28px] mb-5 shadow-lg shadow-black/5 border", getCardBorderClass())}>
       
       <View className="flex-row justify-between items-start mb-4">
         
-        {/* 🌟 BLOQUE DEL TÍTULO AGRUPADO PARA EL LECTOR DE PANTALLA */}
         <View 
           className="flex-1 mr-3"
           accessible={true}
@@ -125,34 +174,52 @@ export default function AudioCard({
           </View>
         </View>
 
-        {/* 🌟 BOTONES DE ACCIÓN (Corazón y Basurero) */}
-        {(context === 'catalog' || context === 'favorites') && (
-          <View className="flex-row items-center gap-2">
-            {context === 'catalog' && currentUser?.role === 'admin' && (
-              <TouchableOpacity 
-                onPress={() => onDeleteAdmin?.(item)} 
-                className="w-12 h-12 bg-red-50 rounded-full border border-red-200 items-center justify-center shadow-sm" 
-                accessibilityRole="button" 
-                accessibilityLabel="Eliminar audio"
-                accessibilityHint={`Elimina ${displayTitle} permanentemente del catálogo`}
-              >
-                <Ionicons name="trash" size={22} color="#DC2626" importantForAccessibility="no" />
-              </TouchableOpacity>
-            )}
+        <View className="flex-row items-center gap-2">
+          
+          {/* 🌟 BOTÓN DE DESCARGA */}
+          {hasAudio && (
+            <TouchableOpacity 
+              onPress={handleDownload} 
+              disabled={isDownloading}
+              className="w-12 h-12 bg-sky-50 rounded-full border border-sky-200 items-center justify-center shadow-sm" 
+              accessibilityRole="button" 
+              accessibilityLabel="Descargar o compartir audio"
+              accessibilityHint={`Abre el menú para guardar o compartir ${displayTitle}`}
+            >
+              {isDownloading ? (
+                <ActivityIndicator size="small" color="#0284C7" importantForAccessibility="no" />
+              ) : (
+                <Ionicons name="share-social-sharp" size={22} color="#0284C7" importantForAccessibility="no" />
+              )}
+            </TouchableOpacity>
+          )}
 
-            {(context === 'favorites' || (context === 'catalog' && currentUser?.role === 'oyente')) && (
-              <TouchableOpacity 
-                onPress={() => onToggleFavorite?.(item)} 
-                className={cn("w-12 h-12 rounded-full border items-center justify-center shadow-sm", item.is_favorite ? "bg-rose-50 border-rose-200" : "bg-secondary border-border")}
-                accessibilityRole="button" 
-                accessibilityLabel={item.is_favorite ? "Quitar de favoritos" : "Agregar a favoritos"}
-                accessibilityHint={item.is_favorite ? `Quita ${displayTitle} de tu lista` : `Guarda ${displayTitle} en tu lista`}
-              >
-                <Ionicons name={item.is_favorite ? "heart" : "heart-outline"} size={22} color={item.is_favorite ? "#E11D48" : "#64748B"} style={{ marginTop: 1 }} importantForAccessibility="no" />
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+          {/* Admin Delete */}
+          {context === 'catalog' && currentUser?.role === 'admin' && (
+            <TouchableOpacity 
+              onPress={() => onDeleteAdmin?.(item)} 
+              className="w-12 h-12 bg-red-50 rounded-full border border-red-200 items-center justify-center shadow-sm" 
+              accessibilityRole="button" 
+              accessibilityLabel="Eliminar audio"
+              accessibilityHint={`Elimina ${displayTitle} permanentemente del catálogo`}
+            >
+              <Ionicons name="trash" size={22} color="#DC2626" importantForAccessibility="no" />
+            </TouchableOpacity>
+          )}
+
+          {/* Favorite Toggle */}
+          {(context === 'favorites' || (context === 'catalog' && currentUser?.role === 'oyente')) && (
+            <TouchableOpacity 
+              onPress={() => onToggleFavorite?.(item)} 
+              className={cn("w-12 h-12 rounded-full border items-center justify-center shadow-sm", item.is_favorite ? "bg-rose-50 border-rose-200" : "bg-secondary border-border")}
+              accessibilityRole="button" 
+              accessibilityLabel={item.is_favorite ? "Quitar de favoritos" : "Agregar a favoritos"}
+              accessibilityHint={item.is_favorite ? `Quita ${displayTitle} de tu lista` : `Guarda ${displayTitle} en tu lista`}
+            >
+              <Ionicons name={item.is_favorite ? "heart" : "heart-outline"} size={22} color={item.is_favorite ? "#E11D48" : "#64748B"} style={{ marginTop: 1 }} importantForAccessibility="no" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
       
       {/* 🌟 FEEDBACK DE RECHAZO PARA EL VOLUNTARIO */}
@@ -187,7 +254,7 @@ export default function AudioCard({
         </View>
       )}
 
-      {/* 🌟 FICHA TÉCNICA (Autor y Voz) - Oculta si el pedido está totalmente vacío de nombres */}
+      {/* 🌟 FICHA TÉCNICA (Autor y Voz) */}
       {!isVolunteerContext && (item.author || item.reader) && (
         <View className="bg-secondary/40 rounded-2xl p-4 mb-4 border border-border/50">
           
@@ -280,14 +347,15 @@ export default function AudioCard({
             </View>
           ) : context === 'history' && (
             <>
-              <Text 
-                className="text-sm text-muted-foreground italic mb-1 px-1"
+              <View className="flex-row items-center gap-3 p-3.5 bg-secondary/30 rounded-[20px] border border-border/50"
                 accessible={true}
-                accessibilityLabel="Tu pedido está en la lista de espera de los narradores."
-              >
-                Tu pedido está en la lista de espera de los narradores.
-              </Text>
-              
+                accessibilityLabel="Tu audio está en la lista de espera para ser grabado por los narradores voluntarios">
+
+                <ActivityIndicator size="small" color="#00000086" importantForAccessibility="no" />
+                <Text className="text-sm text-muted-foreground italic mb-1 px-1">
+                  Tu pedido está en la lista de espera de los narradores.
+                </Text>
+              </View>
               {/* BOTONES DE EDICIÓN HISTORIAL */}
               {isPending && (
                 <View className="flex-row justify-end gap-3 mt-4 pt-4 border-t border-border/50">

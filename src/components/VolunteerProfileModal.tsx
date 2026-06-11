@@ -18,7 +18,7 @@ export default function VolunteerProfileModal({ visible, onClose, profileData }:
   const handleClose = () => {
     setTimeout(() => {
       onClose(false);
-    }, 300);
+    }, 150);
   };
 
   return (

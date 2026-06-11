@@ -24,18 +24,18 @@ export default function VolunteerTabs() {
           else if (route.name === 'Perfil') iconName = focused ? 'person' : 'person-outline';
           return <Ionicons name={iconName} size={size + 4} color={color} />;
         },
-        tabBarActiveTintColor: '#000000', // Equivalente a text-foreground
+        tabBarActiveTintColor: '#2414D3', // Equivalente a text-foreground
         tabBarInactiveTintColor: '#9CA3AF', // Equivalente a text-muted-foreground
         tabBarStyle: {
           backgroundColor: '#FFFFFF', // Equivalente a bg-card
           borderTopWidth: 1,
           borderTopColor: '#E5E7EB', // Equivalente a border-border
           height: 60 + insets.bottom, 
-          paddingBottom: insets.bottom > 0 ? insets.bottom : 10, 
-          paddingTop: 10,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 10,
         },
         tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
         headerShown: false,
+        animation: 'shift',
       })}
     >
       <Tab.Screen name="Pedidos" component={VolunteerWall} />

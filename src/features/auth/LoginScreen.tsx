@@ -146,15 +146,14 @@ export default function LoginScreen({ navigation }: any) {
             <View className="flex-1 justify-center">
               
               {/* 🌟 HEADER ÉPICO */}
-              <View className="items-center mb-8 mt-4">
-                <View className="bg-primary/5 p-3 rounded-[36px] mb-5 border-[6px] border-primary/10 shadow-sm">
-                  <Image 
-                    source={logoMedalla} 
-                    className="w-28 h-28" 
-                    resizeMode="contain" 
-                    importantForAccessibility="no" 
-                  />
-                </View>
+              <View className="items-center mb-8">
+                <Image 
+                  source={logoMedalla} 
+                  className="w-44 h-44" 
+                  resizeMode="contain" 
+                  importantForAccessibility="no" 
+                />
+
                 <Text className="text-3xl font-extrabold tracking-tight text-foreground text-center" accessibilityRole="header">
                   {savedName ? `¡Hola, ${savedName}!` : 'Iniciar Sesión'}
                 </Text>

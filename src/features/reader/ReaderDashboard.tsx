@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, ActivityIndicator, ScrollView, Image } from 'react-native';
+import { View, ActivityIndicator, ScrollView, Image, AccessibilityInfo} from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'; // 🌟 Nece
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
 import Toast from 'react-native-toast-message';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // 🌟 Componentes de RNR y Wrapper
 import ScreenWrapper from '../../components/ScreenWrapper';
@@ -48,6 +49,37 @@ export default function ReaderDashboard({ navigation }: any) {
   useEffect(() => {
     registerForPushNotificationsAsync();
     fetchCategories(); 
+  }, []);
+
+  useEffect(() => {
+    const playAccessibilityIntro = async () => {
+      try {
+        // Chequeamos si ya escuchó la intro antes
+        const hasHeardIntro = await AsyncStorage.getItem('@apronovid_intro_played');
+        
+        // Verificamos si el usuario realmente tiene el lector de pantalla activado
+        const isScreenReaderEnabled = await AccessibilityInfo.isScreenReaderEnabled();
+
+        if (!hasHeardIntro && isScreenReaderEnabled) {
+          // Le damos 1.5 segundos para que la pantalla termine de cargar
+          setTimeout(() => {
+            AccessibilityInfo.announceForAccessibility(
+              "Bienvenido a Apronovid. Aquí podrás solicitar la lectura de textos, documentos o imágenes. " +
+              "En la parte inferior de la pantalla tienes una barra de navegación con cinco pestañas: " +
+              "Pedir Lectura, Mis Audios, Favoritos, Catálogo Público y Perfil. " +
+              "Desliza un dedo hacia la derecha para explorar los elementos de esta pantalla"
+            );
+          }, 1500);
+
+          // Marcamos que ya la escuchó para no molestar cada vez que abre la app
+          await AsyncStorage.setItem('@apronovid_intro_played', 'true');
+        }
+      } catch (error) {
+        console.error("Error con la accesibilidad:", error);
+      }
+    };
+
+    playAccessibilityIntro();
   }, []);
 
   const fetchCategories = async () => {
@@ -168,7 +200,7 @@ export default function ReaderDashboard({ navigation }: any) {
         <View className="flex-row items-center mb-1">
           <Image 
             source={logoMedalla} 
-            className="w-8 h-8 mr-3 rounded-md" 
+            className="w-9 h-9 mr-3 rounded-lg shadow-sm" 
             importantForAccessibility="no" 
           />
           <Text className="text-3xl font-bold tracking-tight text-foreground" accessibilityRole="header">

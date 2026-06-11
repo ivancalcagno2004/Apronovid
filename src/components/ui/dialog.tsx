@@ -1,10 +1,8 @@
-import { Icon } from './icon';
 import { NativeOnlyAnimatedView } from './native-only-animated-view';
 import { cn } from '../../lib/utils';
 import * as DialogPrimitive from '@rn-primitives/dialog';
-import { X } from 'lucide-react-native';
 import * as React from 'react';
-import { Platform, Text, View, type ViewProps } from 'react-native';
+import { Platform, View, type ViewProps, Modal } from 'react-native'; // 🌟 Importamos Modal
 import { FadeIn, FadeOut } from 'react-native-reanimated';
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens';
 
@@ -16,7 +14,22 @@ const DialogPortal = DialogPrimitive.Portal;
 
 const DialogClose = DialogPrimitive.Close;
 
-const FullWindowOverlay = Platform.OS === 'ios' ? RNFullWindowOverlay : React.Fragment;
+// En lugar de usar un Fragmento invisible, usamos un Modal Nativo de React Native
+// Esto obliga al sistema operativo a "atrapar" el foco del lector de pantalla.
+const AndroidModalWrapper = ({ children }: { children: React.ReactNode }) => (
+  <Modal
+    transparent
+    visible
+    animationType="none"
+    onRequestClose={() => {
+      // Vacío intencionalmente para evitar crashes con el botón físico "Atrás"
+    }}
+  >
+    {children}
+  </Modal>
+);
+
+const FullWindowOverlay = Platform.OS === 'ios' ? RNFullWindowOverlay : AndroidModalWrapper;
 
 function DialogOverlay({
   className,
@@ -28,6 +41,8 @@ function DialogOverlay({
   return (
     <FullWindowOverlay>
       <DialogPrimitive.Overlay
+        accessibilityViewIsModal={true} // Funciona en iOS
+        importantForAccessibility="yes" // Ayuda extra para Android
         className={cn(
           'absolute bottom-0 left-0 right-0 top-0 flex items-center justify-center bg-black/50 p-2',
           Platform.select({
@@ -46,6 +61,7 @@ function DialogOverlay({
     </FullWindowOverlay>
   );
 }
+
 function DialogContent({
   className,
   portalHost,
@@ -58,6 +74,8 @@ function DialogContent({
     <DialogPortal hostName={portalHost}>
       <DialogOverlay>
         <DialogPrimitive.Content
+          accessibilityViewIsModal={true}
+          importantForAccessibility="yes"
           className={cn(
             'bg-background border-border z-50 mx-auto flex w-full max-w-[calc(100%-2rem)] flex-col gap-4 rounded-lg border p-6 shadow-lg shadow-black/5 sm:max-w-lg',
             Platform.select({
@@ -67,20 +85,6 @@ function DialogContent({
           )}
           {...props}>
           <>{children}</>
-          <DialogPrimitive.Close
-            className={cn(
-              'absolute right-4 top-4 rounded opacity-70 active:opacity-100',
-              Platform.select({
-                web: 'ring-offset-background focus:ring-ring data-[state=open]:bg-accent transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-offset-2',
-              })
-            )}
-            hitSlop={12}>
-            <Icon
-              as={X}
-              className={cn('text-accent-foreground web:pointer-events-none size-4 shrink-0')}
-            />
-            <Text className="sr-only">Close</Text>
-          </DialogPrimitive.Close>
         </DialogPrimitive.Content>
       </DialogOverlay>
     </DialogPortal>

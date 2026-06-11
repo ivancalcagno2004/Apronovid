@@ -47,14 +47,13 @@ export default function ProfileScreen({ navigation }: any) {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const [feedbackType, setFeedbackType] = useState('bug'); // Ahora manejado por Tabs
+  const [feedbackType, setFeedbackType] = useState('bug');
   const [feedbackMessage, setFeedbackMessage] = useState('');
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
 
   const [statsData, setStatsData] = useState<VolunteerStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
 
-  // 🌟 SOLUCIÓN DEFINITIVA: useIsFocused no pierde el contexto al recargar o cambiar estados
   const isFocused = useIsFocused();
 
   let displayRole = user?.role === 'oyente' ? 'Oyente' : 'Narrador Voluntario';
@@ -188,6 +187,25 @@ export default function ProfileScreen({ navigation }: any) {
             <Ionicons name="chevron-forward" size={24} color="#BE123C" />
           </TouchableOpacity>
 
+          {/* 🌟 SECCIÓN NUEVA: CENTRO DE AYUDA (Solo para voluntarios) */}
+          {user?.role === 'narrador' && (
+            <TouchableOpacity 
+              className="flex-row items-center bg-card p-5 rounded-[28px] border border-border/60 mb-6 shadow-sm shadow-black/5"
+              onPress={() => navigation.navigate('VolunteerHelp')}
+              accessibilityRole="button"
+              accessibilityLabel="Abrir el centro de ayuda"
+            >
+              <View className="w-14 h-14 rounded-full bg-blue-50 justify-center items-center mr-4 border border-blue-100">
+                <Ionicons name="help-circle" size={28} color="#2563EB" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-lg font-extrabold text-foreground mb-1">Centro de Ayuda</Text>
+                <Text className="text-sm text-muted-foreground font-medium leading-tight">Tutorial paso a paso y preguntas frecuentes.</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color="#94A3B8" />
+            </TouchableOpacity>
+          )}
+
           {/* SECCIÓN: CONTRASEÑA */}
           <View className="bg-card p-6 rounded-[32px] border border-border/60 mb-6 shadow-lg shadow-black/5">
             <View className="flex-row items-center mb-4">
@@ -198,14 +216,14 @@ export default function ProfileScreen({ navigation }: any) {
             </View>
 
             {!isEditingPassword ? (
-              <Button variant="secondary" size="lg" className="rounded-2xl" onPress={() => setIsEditingPassword(true)}>
-                <Text className="font-bold text-foreground">Cambiar mi contraseña</Text>
+              <Button variant="secondary" size="lg" className="rounded-2xl h-14" onPress={() => setIsEditingPassword(true)}>
+                <Text className="font-extrabold text-foreground text-base">Cambiar mi contraseña</Text>
               </Button>
             ) : (
               <View className="gap-3">
                 <View className="relative justify-center">
                   <Input 
-                    className="h-14 rounded-2xl px-4 bg-secondary/30 border-transparent focus:border-primary pr-12"
+                    className="h-14 rounded-2xl px-4 bg-secondary/30 border-transparent focus:border-primary pr-12 text-base font-medium"
                     placeholder="Contraseña actual" 
                     secureTextEntry={!showCurrentPassword} 
                     value={currentPassword} 
@@ -218,7 +236,7 @@ export default function ProfileScreen({ navigation }: any) {
 
                 <View className="relative justify-center">
                   <Input 
-                    className="h-14 rounded-2xl px-4 bg-secondary/30 border-transparent focus:border-primary pr-12"
+                    className="h-14 rounded-2xl px-4 bg-secondary/30 border-transparent focus:border-primary pr-12 text-base font-medium"
                     placeholder="Nueva contraseña" 
                     secureTextEntry={!showNewPassword} 
                     value={newPassword} 
@@ -229,12 +247,12 @@ export default function ProfileScreen({ navigation }: any) {
                   </TouchableOpacity>
                 </View>
                 
-                <View className="flex-row justify-end gap-2 mt-2">
+                <View className="flex-row justify-end gap-3 mt-3">
                   <Button variant="ghost" size="default" onPress={() => setIsEditingPassword(false)}>
-                    <Text className="font-bold text-muted-foreground">Cancelar</Text>
+                    <Text className="font-extrabold text-muted-foreground text-base">Cancelar</Text>
                   </Button>
-                  <Button size="default" onPress={handleUpdatePassword} disabled={isLoading}>
-                    {isLoading ? <ActivityIndicator color="#FFF" /> : <Text className="font-bold text-primary-foreground">Actualizar</Text>}
+                  <Button size="default" onPress={handleUpdatePassword} disabled={isLoading} className="rounded-xl px-6">
+                    {isLoading ? <ActivityIndicator color="#FFF" /> : <Text className="font-extrabold text-primary-foreground text-base tracking-wide">Actualizar</Text>}
                   </Button>
                 </View>
               </View>
@@ -245,7 +263,7 @@ export default function ProfileScreen({ navigation }: any) {
           {user?.role === 'narrador' && (
             <View className="bg-card p-6 rounded-[32px] border border-border/60 mb-6 shadow-lg shadow-black/5">
               <View className="flex-row items-center mb-5">
-                <View className="bg-secondary p-2 rounded-full mr-3">
+                <View className="bg-secondary p-2 rounded-full mr-3 border border-border/50">
                   <Ionicons name="bar-chart" size={20} color="#0F172A" />
                 </View>
                 <Text className="text-xl font-extrabold text-foreground" accessibilityRole="header">Rendimiento</Text>
@@ -277,8 +295,8 @@ export default function ProfileScreen({ navigation }: any) {
 
                   <Text className="text-sm font-extrabold text-neutral-400 uppercase tracking-widest mb-4 ml-1">Medallas Obtenidas</Text>
                   {statsData.badges.length === 0 ? (
-                    <View className="bg-secondary/30 p-5 rounded-2xl items-center border border-border/50 mb-2">
-                      <Ionicons name="lock-closed-outline" size={24} color="#94A3B8" className="mb-2" />
+                    <View className="bg-secondary/30 p-5 rounded-[20px] items-center border border-border/50 mb-2">
+                      <Ionicons name="lock-closed-outline" size={28} color="#94A3B8" className="mb-2" />
                       <Text className="text-sm text-neutral-500 font-medium text-center">
                         Aún no tenés logros. ¡Seguí grabando para desbloquear medallas!
                       </Text>
@@ -294,8 +312,8 @@ export default function ProfileScreen({ navigation }: any) {
                             <Ionicons name={badge.icon} size={24} color={badge.color} />
                           </View>
                           <View className="flex-1">
-                            <Text className="text-base font-bold text-foreground">{badge.title}</Text>
-                            <Text className="text-xs text-muted-foreground mt-0.5 font-medium">{badge.desc}</Text>
+                            <Text className="text-base font-extrabold text-foreground mb-0.5">{badge.title}</Text>
+                            <Text className="text-xs text-muted-foreground font-medium leading-tight">{badge.desc}</Text>
                           </View>
                         </View>
                       ))}
@@ -303,41 +321,40 @@ export default function ProfileScreen({ navigation }: any) {
                   )}
                 </>
               ) : (
-                <Text className="text-sm text-muted-foreground italic text-center mt-2">No se pudieron cargar las estadísticas.</Text>
+                <Text className="text-sm text-muted-foreground italic text-center mt-2 font-medium">No se pudieron cargar las estadísticas.</Text>
               )}
             </View>
           )}
 
-          {/* 🌟 SECCIÓN: FEEDBACK (Ahora usando Tabs de RNR) */}
+          {/* 🌟 SECCIÓN: FEEDBACK */}
           <View className="bg-card p-6 rounded-[32px] border border-border/60 mb-8 shadow-lg shadow-black/5">
             <View className="flex-row items-center mb-3">
-              <View className="bg-secondary p-2 rounded-full mr-3">
+              <View className="bg-secondary p-2 rounded-full mr-3 border border-border/50">
                 <Ionicons name="chatbubbles" size={20} color="#0F172A" />
               </View>
-              <Text className="text-xl font-extrabold text-foreground" accessibilityRole="header">Sugerencias y Reportes</Text>
+              <Text className="text-lg font-extrabold text-foreground" accessibilityRole="header">Sugerencias y Reportes</Text>
             </View>
             <Text className="text-sm text-muted-foreground mb-5 font-medium leading-relaxed">¿Encontraste un error o tenés una idea para mejorar la app? ¡Escribinos!</Text>
             
-            {/* 🌟 TABS OFICIALES DE RNR */}
             <Tabs
               value={feedbackType}
               onValueChange={setFeedbackType}
               className="w-full flex-col mb-4"
             >
-              <TabsList className="flex-row w-full bg-secondary/80 rounded-2xl p-1 h-14">
-                <TabsTrigger value="bug" className="flex-1 flex-row items-center justify-center gap-2 rounded-xl">
-                  <Ionicons name="bug" size={16} color={feedbackType === 'bug' ? '#D90606' : '#64748B'} />
-                  <Text className={cn("font-bold", feedbackType === 'bug' ? "text-red-700" : "text-muted-foreground")}>Error</Text>
+              <TabsList className="flex-row w-full bg-secondary/80 rounded-[20px] p-1.5 h-[52px]">
+                <TabsTrigger value="bug" className="flex-1 flex-row items-center justify-center gap-2 rounded-[14px]">
+                  <Ionicons name="bug" size={16} color={feedbackType === 'bug' ? '#DC2626' : '#64748B'} />
+                  <Text className={cn("font-extrabold text-sm tracking-wide", feedbackType === 'bug' ? "text-red-700" : "text-muted-foreground")}>Error</Text>
                 </TabsTrigger>
-                <TabsTrigger value="suggestion" className="flex-1 flex-row items-center justify-center gap-2 rounded-xl">
+                <TabsTrigger value="suggestion" className="flex-1 flex-row items-center justify-center gap-2 rounded-[14px]">
                   <Ionicons name="bulb" size={16} color={feedbackType === 'suggestion' ? '#D97706' : '#64748B'} />
-                  <Text className={cn("font-bold", feedbackType === 'suggestion' ? "text-amber-700" : "text-muted-foreground")}>Idea</Text>
+                  <Text className={cn("font-extrabold text-sm tracking-wide", feedbackType === 'suggestion' ? "text-amber-700" : "text-muted-foreground")}>Idea</Text>
                 </TabsTrigger>
               </TabsList>
             </Tabs>
 
             <Input
-              className="rounded-2xl px-4 pt-4 pb-4 bg-secondary/30 border-transparent focus:border-primary text-base mt-2"
+              className="rounded-[20px] px-5 pt-4 pb-4 bg-secondary/30 border-border/50 focus:border-primary text-[15px] font-medium mt-2"
               style={{ height: 120 }}
               placeholder={feedbackType === 'bug' ? "Describí el problema detalladamente..." : "Contanos tu idea para mejorar la app..."}
               multiline={true}
@@ -347,15 +364,15 @@ export default function ProfileScreen({ navigation }: any) {
               textAlignVertical="top"
             />
 
-            <Button size="lg" className="rounded-2xl mt-4 h-14" onPress={handleSubmitFeedback} disabled={isSubmittingFeedback}>
-              {isSubmittingFeedback ? <ActivityIndicator color="#FFF" /> : <Text className="text-primary-foreground font-extrabold text-base tracking-wide">Enviar Mensaje</Text>}
+            <Button size="lg" className="rounded-[16px] mt-5 h-14 shadow-md shadow-primary/20" onPress={handleSubmitFeedback} disabled={isSubmittingFeedback}>
+              {isSubmittingFeedback ? <ActivityIndicator color="#FFF" /> : <Text className="text-primary-foreground font-extrabold text-lg tracking-wide">Enviar Mensaje</Text>}
             </Button>
           </View>
 
           {/* FOOTER */}
           <View className="items-center pb-8" accessible={true}>
-            <Text className="text-sm font-black text-gray-700 uppercase tracking-widest mb-1">Apronovid v1.2.0</Text>
-            <Text className="text-xs text-neutral-400 font-medium">© 2026 Desarrollado por Jano</Text>
+            <Text className="text-sm font-black uppercase tracking-widest mb-1">Apronovid v1.2.0</Text>
+            <Text className="text-xs text-muted-foreground font-medium">© 2026 Desarrollado por Jano</Text>
           </View>
 
         </ScrollView>

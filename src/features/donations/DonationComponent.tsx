@@ -1,10 +1,15 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Linking } from 'react-native';
+import { View, TouchableOpacity, Linking, ScrollView } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 
-export default function DonationComponent() {
+// 🌟 Componentes RNR Base
+import ScreenWrapper from '../../components/ScreenWrapper';
+import { Text } from '../../components/ui/text';
+import { Button } from '../../components/ui/button';
+
+export default function DonationComponent({navigation}: any) {
   // 🌟 Reemplazá esto con tu link real de Mercado Pago
   const MP_LINK = 'https://link.mercadopago.com.ar/apronovid'; 
   const MI_ALIAS = 'ivan.calcagno';
@@ -36,40 +41,87 @@ export default function DonationComponent() {
   };
 
   return (
-    <View 
-      className="bg-sky-50 p-5 rounded-3xl border border-sky-200 my-5"
-      accessible={true}
-      accessibilityRole="text"
-      accessibilityLabel="Sección de donaciones. Apoyá el proyecto."
-    >
-      <Text className="text-xl font-bold text-sky-600 mb-2 text-center">☕ Apoyá el proyecto</Text>
-      <Text className="text-[15px] text-slate-700 text-center mb-5 leading-relaxed">
-        Esta app es gratuita y se mantiene a pulmón. Si querés ayudarnos a cubrir los costos de los servidores, podés hacer un aporte. ¡Todo suma!
-      </Text>
-
-      <View className="gap-y-3">
-        {/* Opción 1: Link de Pago (Acepta tarjetas, cobra comisión) */}
+    <ScreenWrapper withBottomInsets={true}>
+      
+      {/* 🌟 HEADER (Se mantiene exactamente igual) */}
+      <View className="px-6 pt-2 pb-4 border-b border-border bg-background/90 z-10 flex-row items-center">
         <TouchableOpacity 
-          className="bg-[#009EE3] flex-row py-3.5 rounded-xl items-center justify-center shadow-sm" 
-          onPress={openMercadoPago}
-          accessibilityRole="button"
-          accessibilityLabel="Donar con Mercado Pago"
+          onPress={() => navigation.goBack()} 
+          className="mr-4 bg-secondary/50 p-2.5 rounded-full border border-border/50" 
+          accessibilityRole="button" 
+          accessibilityLabel="Volver al inicio"
         >
-          <Ionicons name="card-outline" size={20} color="#FFF" className="mr-2" />
-          <Text className="text-white font-bold text-base ml-2">Donar con Mercado Pago</Text>
+          <Ionicons name="chevron-back" size={22} color="#0F172A" importantForAccessibility="no" />
         </TouchableOpacity>
-
-        {/* Opción 2: Alias (Transferencia, 0% comisión) */}
-        <TouchableOpacity 
-          className="bg-white border border-primary flex-row py-3.5 rounded-xl items-center justify-center shadow-sm" 
-          onPress={copyAlias}
-          accessibilityRole="button"
-          accessibilityLabel="Copiar Alias, sin comisión"
-        >
-          <Ionicons name="copy-outline" size={20} color="#171717" className="mr-2" />
-          <Text className="text-primary font-bold text-base ml-2">Copiar Alias (Sin comisión)</Text>
-        </TouchableOpacity>
+        <Text className="text-3xl font-extrabold tracking-tight text-foreground flex-1" numberOfLines={1} accessibilityRole="header">
+          Donaciones
+        </Text>
       </View>
-    </View>
+
+      <ScrollView 
+        className="flex-1 px-5 pt-6" 
+        contentContainerStyle={{ paddingBottom: 60 }} 
+        showsVerticalScrollIndicator={false}
+      >
+        {/* 🌟 TARJETA ÉPICA DE DONACIÓN */}
+        <View 
+          className="bg-card p-6 rounded-[32px] border border-border/60 shadow-lg shadow-black/5"
+          accessible={true}
+          accessibilityRole="text"
+          accessibilityLabel="Sección de donaciones. Apoyá el proyecto."
+        >
+          <View className="flex-row items-center mb-4">
+            <View className="bg-sky-100 w-12 h-12 rounded-full items-center justify-center mr-3 border border-sky-200">
+              <Ionicons name="cafe" size={24} color="#0284C7" style={{ marginLeft: 2 }} />
+            </View>
+            <Text className="text-2xl font-extrabold text-foreground flex-1" accessibilityRole="header">
+              Apoyá el proyecto
+            </Text>
+          </View>
+          
+          <Text className="text-[15px] font-medium text-muted-foreground leading-relaxed mb-6">
+            Esta app es gratuita y se mantiene a pulmón. Si querés ayudarnos a cubrir los costos de los servidores para que siga funcionando, podés hacer un aporte. ¡Todo suma!
+          </Text>
+
+          <View className="gap-y-3.5">
+            {/* Opción 1: Link de Pago (Acepta tarjetas, cobra comisión) */}
+            <Button 
+              className="w-full h-14 rounded-[20px] shadow-md bg-[#009EE3] active:bg-[#0089C4]"
+              size="lg"
+              onPress={openMercadoPago}
+              accessibilityLabel="Donar con Mercado Pago"
+            >
+              <View className="flex-row items-center justify-center w-full">
+                <Ionicons name="card" size={20} color="#FFF" style={{ marginRight: 8 }} />
+                <Text className="text-white font-extrabold text-base tracking-wide">Donar con Mercado Pago</Text>
+              </View>
+            </Button>
+
+            {/* Opción 2: Alias (Transferencia, 0% comisión) */}
+            <Button 
+              variant="outline"
+              className="w-full h-14 rounded-[20px] border-border/80 bg-secondary/30"
+              size="lg"
+              onPress={copyAlias}
+              accessibilityLabel="Copiar Alias, sin comisión"
+            >
+              <View className="flex-row items-center justify-center w-full">
+                <Ionicons name="copy-outline" size={20} color="#0F172A" style={{ marginRight: 8 }} />
+                <Text className="text-foreground font-extrabold text-base tracking-wide">Copiar Alias (Sin comisión)</Text>
+              </View>
+            </Button>
+          </View>
+        </View>
+
+        {/* 🌟 FOOTER DE TRANSPARENCIA */}
+        <View className="mt-8 items-center px-4" accessible={true}>
+          <Ionicons name="heart" size={24} color="#E11D48" className="mb-2" />
+          <Text className="text-sm font-bold text-foreground mb-1 text-center">¡Gracias infinitas!</Text>
+          <Text className="text-xs font-medium text-muted-foreground text-center leading-relaxed">
+            Tu contribución va 100% a la asociación.
+          </Text>
+        </View>
+      </ScrollView>
+    </ScreenWrapper>
   );
 }
