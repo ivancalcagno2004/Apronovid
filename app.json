@@ -16,7 +16,7 @@
     "splash": {
       "image": "./assets/splash_icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0F172A"
     },
     
     "ios": {
@@ -25,7 +25,12 @@
     "android": {
       "versionCode": 3,
       "package": "com.apronovid.app",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#0F172A" 
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -34,7 +39,10 @@
       "expo-secure-store",
       [
         "expo-notifications",
-        {}
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#1D4ED8"
+        }
       ],
       [
         "expo-build-properties",
