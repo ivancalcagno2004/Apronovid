@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, ActivityIndicator, Image, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { View, ActivityIndicator, Image, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, TouchableWithoutFeedback, Keyboard, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
@@ -87,6 +87,10 @@ export default function LoginScreen({ navigation }: any) {
         navigation.navigate('RoleSelection');
       } else if (error.code !== statusCodes.SIGN_IN_CANCELLED) {
         Toast.show({ type: 'error', text1: 'Error de inicio de sesión', text2: 'No se pudo iniciar sesión con Google.' });
+        Alert.alert(
+    "Error detallado", 
+    JSON.stringify(error.response?.data || error.message || error)
+  );
       }
     } finally {
       setIsSubmitting(false);
