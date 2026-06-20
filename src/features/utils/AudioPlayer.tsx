@@ -216,11 +216,13 @@ export default function AudioPlayer({ audioUrl, id, activeId, onPlay, accessibil
           </Text>
         </View>
 
-        {/* Botones de salto — gap reemplazado por márgenes explícitos */}
+        {/* 🌟 Botones de salto — Condicionalmente ocultos si están deshabilitados */}
         <View className="flex-row justify-between items-center mt-1.5">
           <TouchableOpacity
             onPress={() => jump(-10000)}
             disabled={!sound}
+            importantForAccessibility={!sound ? "no-hide-descendants" : "auto"}
+            accessibilityElementsHidden={!sound ? true : false}
             accessibilityRole="button"
             accessibilityLabel="Retroceder 10 segundos"
             className="flex-row items-center bg-background px-3 py-1.5 rounded-full border border-border shadow-sm"
@@ -237,6 +239,8 @@ export default function AudioPlayer({ audioUrl, id, activeId, onPlay, accessibil
           <TouchableOpacity
             onPress={() => jump(10000)}
             disabled={!sound}
+            importantForAccessibility={!sound ? "no-hide-descendants" : "auto"}
+            accessibilityElementsHidden={!sound ? true : false}
             accessibilityRole="button"
             accessibilityLabel="Adelantar 10 segundos"
             className="flex-row items-center bg-background px-3 py-1.5 rounded-full border border-border shadow-sm"

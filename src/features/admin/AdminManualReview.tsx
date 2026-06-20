@@ -18,7 +18,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 
 // 🌟 Modal Modularizado
 import VolunteerProfileModal from '../../components/VolunteerProfileModal';
-
 const logoMedalla = require('../../../assets/favicon.png');
 
 // 🌟 Subcomponente Refactorizado (ReviewItemCard)
@@ -159,6 +158,12 @@ export default function AdminManualReview() {
   // Estado del Perfil
   const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
   const [publicProfileData, setPublicProfileData] = useState<any>(null);
+  const [userToBlock, setUserToBlock] = useState<number | null>(null);
+
+  const handleRequestBlock = (userId: number) => {
+    setIsProfileModalVisible(false); // Apaga el perfil
+    setTimeout(() => setUserToBlock(userId), 400); // Enciende la alerta
+  };
 
   useEffect(() => {
     fetchReviews();
@@ -332,6 +337,7 @@ export default function AdminManualReview() {
         visible={isProfileModalVisible} 
         onClose={() => setIsProfileModalVisible(false)} 
         profileData={publicProfileData} 
+        onSuccessBlock={() => fetchReviews()} // Recarga las revisiones al bloquear un usuario
       />
 
     </ScreenWrapper>

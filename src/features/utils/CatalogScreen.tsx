@@ -20,7 +20,6 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 
 // 🌟 Modal Modularizado
 import VolunteerProfileModal from '../../components/VolunteerProfileModal';
-
 const logoMedalla = require('../../../assets/favicon.png');
 
 interface CatalogItem {
@@ -61,6 +60,16 @@ export default function CatalogScreen() {
   // Estado para eliminar audio (Admin)
   const [itemToDelete, setItemToDelete] = useState<CatalogItem | null>(null);
 
+  const [nextPage, setNextPage] = useState<number | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  const [userToBlock, setUserToBlock] = useState<number | null>(null);
+
+  const handleRequestBlock = (userId: number) => {
+    setIsProfileModalVisible(false); // Apaga el perfil
+    setTimeout(() => setUserToBlock(userId), 400); // Enciende la alerta
+  };
+
   const route = useRoute<any>();
 
   useEffect(() => {
@@ -86,26 +95,40 @@ export default function CatalogScreen() {
   useFocusEffect(
     useCallback(() => {
       const delayDebounceFn = setTimeout(() => {
-        fetchCatalog(search, selectedCategory);
+        fetchCatalog(search, selectedCategory, 1);
       }, 500);
       return () => clearTimeout(delayDebounceFn);
     }, [search, selectedCategory])
   );
 
-  const fetchCatalog = async (searchQuery = '', categoryId: number | string = 'all') => {
+  const fetchCatalog = async (searchQuery = '', categoryId: number | string = 'all', page: number = 1) => {
     try {
-      setIsLoading(true);
+      if (page === 1) setIsLoading(true);
+      else setIsLoadingMore(true);
+      
       let url = `/catalog?search=${searchQuery}`;
-      if (categoryId !== 'all') {
-        url += `&category_id=${categoryId}`;
-      }
+      if (categoryId !== 'all') url += `&category_id=${categoryId}`;
+      if (page > 1) url += `&page=${page}`; // Le mandamos la página al backend
       
       const response = await api.get(url);
-      setItems(response.data.data || response.data);
+      const newData = response.data.data || [];
+      
+      // Si estamos en la pag 1, reiniciamos la lista. Si es pag > 1, sumamos al final.
+      setItems(prev => (page === 1 ? newData : [...prev, ...newData]));
+      
+      // Guardamos la próxima página que nos dictó Laravel
+      setNextPage(response.data.next_page);
     } catch (error) {
       console.error('Error fetching catalog:', error);
     } finally {
       setIsLoading(false);
+      setIsLoadingMore(false);
+    }
+  };
+
+  const handleLoadMore = () => {
+    if (nextPage && !isLoadingMore) {
+      fetchCatalog(search, selectedCategory, nextPage);
     }
   };
 
@@ -255,10 +278,17 @@ export default function CatalogScreen() {
       ) : (
         <FlatList
           data={items}
-          keyExtractor={(item) => item.id} 
+          keyExtractor={(item) => item.id.toString()} 
           renderItem={renderItem}
           contentContainerStyle={{ paddingBottom: 80, paddingHorizontal: 20, paddingTop: 8 }}
           showsVerticalScrollIndicator={false}
+          onEndReached={handleLoadMore} // Se ejecuta al llegar al final
+          onEndReachedThreshold={0.5}   // Se dispara cuando el usuario está a media pantalla del final
+          ListFooterComponent={        // Muestra un spinner abajo de todo mientras carga más
+            nextPage && isLoadingMore ? (
+              <ActivityIndicator size="small" color="#0F172A" className="my-4" />
+            ) : null
+          }
           ListEmptyComponent={
             /* 🌟 ESTADO VACÍO ILUSTRADO */
             <View className="flex-1 justify-center items-center px-8 mt-16">
@@ -279,6 +309,7 @@ export default function CatalogScreen() {
         visible={isProfileModalVisible} 
         onClose={() => setIsProfileModalVisible(false)} 
         profileData={publicProfileData} 
+        onSuccessBlock={() => fetchCatalog(search, selectedCategory, 1)} // 👈 Le pasamos la función para bloquear usuarios desde el perfil
       />
 
       {/* 🌟 ALERT DIALOG RNR (Eliminar como Admin) */}

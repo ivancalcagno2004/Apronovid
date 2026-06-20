@@ -14,7 +14,6 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 
 // 🌟 Modal de Perfil Modularizado (¡Reutilizamos código!)
 import VolunteerProfileModal from '../../components/VolunteerProfileModal';
-
 const logoMedalla = require('../../../assets/favicon.png');
 
 interface FeedbackItem {
@@ -166,6 +165,13 @@ export default function AdminFeedBackScreen() {
     item: FeedbackItem | null;
   }>({ visible: false, type: null, item: null });
 
+  const [userToBlock, setUserToBlock] = useState<number | null>(null);
+
+  const handleRequestBlock = (userId: number) => {
+    setIsProfileModalVisible(false); // Apaga el perfil
+    setTimeout(() => setUserToBlock(userId), 400); // Enciende la alerta
+  };
+
   const fetchFeedback = async () => {
     try {
       setIsLoading(true);
@@ -299,6 +305,7 @@ export default function AdminFeedBackScreen() {
         visible={isProfileModalVisible} 
         onClose={() => setIsProfileModalVisible(false)} 
         profileData={publicProfileData} 
+        onSuccessBlock={() => fetchFeedback()}
       />
 
       {/* 🌟 ALERT DIALOG DINÁMICO RNR */}

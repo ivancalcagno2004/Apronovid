@@ -1,22 +1,29 @@
 {
   "expo": {
-    "name": "apronovid",
+    "name": "Apronovid",
     "slug": "apronovid",
     "scheme": "apronovid",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "portrait",
-    "icon": "./assets/favicon.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+
+    "notification": {
+      "icon": "./assets/notification-icon.png",
+      "color": "#1D4ED8" 
+    },
+
     "splash": {
       "image": "./assets/splash_icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    
     "ios": {
       "supportsTablet": true
     },
     "android": {
-      "versionCode": 2,
+      "versionCode": 3,
       "package": "com.apronovid.app",
       "googleServicesFile": "./google-services.json"
     },
@@ -27,10 +34,7 @@
       "expo-secure-store",
       [
         "expo-notifications",
-        {
-          "icon": "./assets/favicon.png",
-          "color": "#ffffff"
-        }
+        {}
       ],
       [
         "expo-build-properties",

@@ -12,36 +12,53 @@ class FavoriteController extends Controller
     {
         $userId = $request->user()->id;
 
-        // 🌟 MAGIA ELOQUENT: Traemos todos los favoritos del usuario con sus modelos y categorías en 1 sola consulta
-        $favorites = Favorite::with('favoritable.category')
+        $blockedIds = \Illuminate\Support\Facades\DB::table('blocked_users')
             ->where('user_id', $userId)
-            ->orderBy('created_at', 'desc')
-            ->get();
+            ->pluck('blocked_user_id')
+            ->toArray();
 
-        $results = $favorites->map(function ($fav) {
-            // "favoritable" puede ser un Audiobook o un ReadingRequest automáticamente
+        // 🌟 Usamos Cursor Pagination en vez de get() para traerlos de a 15 de forma ultrarrápida
+        $paginator = Favorite::with('favoritable.category')
+            ->where('user_id', $userId)
+            ->whereNotIn('voluntario_id', $blockedIds)
+            ->orderBy('created_at', 'desc')
+            ->cursorPaginate(15);
+
+        // 🌟 OPTIMIZACIÓN: Buscamos a los voluntarios de antemano para evitar el problema de consultas N+1
+        $readerIds = collect($paginator->items())->filter(function ($fav) {
+            return $fav->favoritable_type === \App\Models\ReadingRequest::class && $fav->favoritable;
+        })->pluck('favoritable.voluntario_id')->filter()->unique();
+
+        $readers = User::whereIn('id', $readerIds)->get()->keyBy('id');
+
+        $results = collect($paginator->items())->map(function ($fav) use ($readers) {
             $item = $fav->favoritable;
 
             // Si por alguna razón el audio original fue borrado por un admin, lo ignoramos
             if (!$item) return null;
 
+            // 🌟 FORMATEO INTELIGENTE HACIA CLOUDFLARE R2
+            $fullAudioUrl = $item->audio_path
+                ? env('R2_PUBLIC_URL') . '/' . ltrim($item->audio_path, '/')
+                : null;
+
             if ($fav->favoritable_type === \App\Models\Audiobook::class) {
                 return [
                     'id' => 'hist_' . $item->id,
                     'title' => $item->title,
-                    'audio_path' => ltrim(str_replace(asset('storage/'), '', $item->audio_path), '/'),
-                    'created_at' => $fav->created_at, // Mostramos la fecha en que lo guardó en favoritos
+                    'audio_path' => $fullAudioUrl,
+                    'created_at' => $fav->created_at,
                     'author' => $item->author,
                     'reader' => $item->reader,
                     'category_name' => $item->category ? $item->category->name : 'Sin categoría',
                 ];
             } else {
-                $voluntario = $item->voluntario_id ? User::find($item->voluntario_id) : null;
+                $voluntario = $item->voluntario_id ? $readers->get($item->voluntario_id) : null;
 
                 return [
                     'id' => 'req_' . $item->id,
                     'title' => $item->title,
-                    'audio_path' => $item->audio_path,
+                    'audio_path' => $fullAudioUrl,
                     'created_at' => $fav->created_at,
                     'reader' => $voluntario ? $voluntario->name : null,
                     'reader_id' => $item->voluntario_id,
@@ -49,9 +66,13 @@ class FavoriteController extends Controller
                     'category_name' => $item->category ? $item->category->name : 'Sin categoría',
                 ];
             }
-        })->filter()->values(); // Filtramos los nulos (si los hay) y reindexamos
+        })->filter()->values();
 
-        return response()->json($results);
+        // 🌟 Devolvemos el array de data y el próximo cursor para que React Native sepa cómo seguir
+        return response()->json([
+            'data' => $results,
+            'next_cursor' => $paginator->nextCursor() ? $paginator->nextCursor()->encode() : null
+        ]);
     }
 
     public function toggle(Request $request, $id)

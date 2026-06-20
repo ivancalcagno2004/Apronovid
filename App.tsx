@@ -15,6 +15,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { configureReanimatedLogger, ReanimatedLogLevel } from 'react-native-reanimated';
 import { Alert, AlertTitle, AlertDescription } from './src/components/ui/alert';
 import * as Linking from 'expo-linking';
+import { Audio } from 'expo-av';
 
 // 🌟 Importaciones para la Tipografía Premium
 import { useFonts } from 'expo-font';
@@ -132,7 +133,6 @@ const linking = {
   prefixes: [Linking.createURL('/'), 'apronovid://'],
   config: {
     screens: {
-      // Cuando el link diga "reset-password", abrirá esta pantalla y le pasará los parámetros (token y email)
       ResetPassword: 'reset-password',
     },
   },
@@ -149,7 +149,7 @@ Notifications.setNotificationHandler({
 
 export default function App() {
   // ==========================================
-  // 1. ZONA DE HOOKS (Todos juntos arriba)
+  // 1. ZONA DE HOOKS
   // ==========================================
   const navigationRef = useNavigationContainerRef();
   const colorScheme = useColorScheme();
@@ -163,6 +163,22 @@ export default function App() {
     Inter_800ExtraBold,
     Inter_900Black,
   });
+
+  // 🌟 CONFIGURACIÓN GLOBAL DEL AUDIO ENVUELTA DE FORMA SEGURA
+  useEffect(() => {
+    const configureAudio = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          staysActiveInBackground: true,
+          playsInSilentModeIOS: true,
+          allowsRecordingIOS: true, 
+        });
+      } catch (error) {
+        console.error("Error al configurar el audio:", error);
+      }
+    };
+    configureAudio();
+  }, []);
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -189,10 +205,10 @@ export default function App() {
   }, []);
 
   // ==========================================
-  // 2. ZONA DE RETORNOS TEMPRANOS (Después de los hooks)
+  // 2. ZONA DE RETORNOS TEMPRANOS
   // ==========================================
   if (!fontsLoaded) {
-    return null; // Mantiene la pantalla "congelada" en el Splash hasta cargar Inter
+    return null; 
   }
 
   // ==========================================

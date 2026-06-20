@@ -203,4 +203,41 @@ class AuthController extends Controller
             'message' => 'El enlace de recuperación es inválido o ha expirado.'
         ], 400);
     }
+
+    public function destroyAccount(Request $request)
+    {
+        $user = $request->user();
+
+        // 1. Opcional pero recomendado: Anonimizar o borrar contenido generado
+        // Si no querés perder los audios buenos que grabó un voluntario, podés 
+        // cambiarles el 'voluntario_id' a null en vez de borrarlos.
+        \App\Models\ReadingRequest::where('oyente_id', $user->id)->update(['oyente_id' => null]);
+
+        // 2. Revocamos todos sus tokens de acceso (cierra la sesión en todos los dispositivos)
+        $user->tokens()->delete();
+
+        // 3. Eliminamos el usuario de la base de datos
+        $user->delete();
+
+        return response()->json(['message' => 'Cuenta y datos eliminados permanentemente.']);
+    }
+
+    public function blockUser(Request $request, $id)
+    {
+        $userId = $request->user()->id;
+
+        if ($userId == $id) {
+            return response()->json(['message' => 'No podés bloquearte a vos mismo.'], 400);
+        }
+
+        \Illuminate\Support\Facades\DB::table('blocked_users')->updateOrInsert(
+            ['user_id' => $userId, 'blocked_user_id' => $id],
+            ['created_at' => now(), 'updated_at' => now()]
+        );
+
+        // Opcional: Borrar de favoritos los audios de esta persona bloqueada
+        // \App\Models\Favorite::where('user_id', $userId)->... 
+
+        return response()->json(['message' => 'Usuario bloqueado. Ya no verás sus audios.']);
+    }
 }

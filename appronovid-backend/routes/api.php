@@ -35,12 +35,12 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // --- PEDIDOS DE LECTURA (OYENTES Y VOLUNTARIOS) ---
-    Route::post('/reading-requests', [ReadingRequestController::class, 'store']);
+    Route::post('/reading-requests', [ReadingRequestController::class, 'store'])->middleware('throttle:10,1');
     Route::get('/reading-requests', [ReadingRequestController::class, 'index']);
     Route::get('/my-reading-requests', [ReadingRequestController::class, 'myRequests']);
     Route::put('/reading-requests/{id}', [ReadingRequestController::class, 'update']);
     Route::delete('/reading-requests/{id}', [ReadingRequestController::class, 'destroy']);
-    Route::get('/catalog', [\App\Http\Controllers\CatalogController::class, 'index']);
+    Route::get('/catalog', [ReadingRequestController::class, 'catalog']);
     Route::post('/feedback', [FeedbackController::class, 'store']);
     Route::get('/admin/feedback', [FeedbackController::class, 'index']);
     Route::delete('/admin/feedback/{id}', [FeedbackController::class, 'destroy']);
@@ -48,6 +48,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/volunteer/stats', [VolunteerRecordingController::class, 'getStats']);
     Route::get('/volunteer/{id}/public-stats', [VolunteerRecordingController::class, 'getPublicStats']);
     Route::post('/reading-requests/{id}/report', [ReadingRequestController::class, 'report']);
+    Route::get('/volunteer/upload-url/{id}', [ReadingRequestController::class, 'getAudioUploadUrl']);
+    Route::delete('/user/account', [AuthController::class, 'destroyAccount']);
+    Route::post('/user/block/{id}', [AuthController::class, 'blockUser']);
 
     // --- AUDIOS Y GRABACIONES ---
     Route::post('/reading-requests/{id}/audio', [ReadingRequestController::class, 'uploadAudio']);
@@ -55,6 +58,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/categories', [CategoryController::class, 'index']);
     Route::get('/favorites', [FavoriteController::class, 'index']);
     Route::post('/favorites/{id}/toggle', [FavoriteController::class, 'toggle']);
+    Route::get('/volunteer/leaderboard', [VolunteerRecordingController::class, 'getLeaderboard']);
 
     // --- CERRAR SESIÓN ---
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -69,6 +73,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/manual-reviews/{id}/reject', [\App\Http\Controllers\Admin\CatalogController::class, 'rejectReview']);
         Route::post('/reported-requests/{id}/restore', [\App\Http\Controllers\FeedbackController::class, 'restoreReport']);
         Route::delete('/reported-requests/{id}', [\App\Http\Controllers\FeedbackController::class, 'deleteReportedRequest']);
+        Route::get('/catalog/upload-url', [\App\Http\Controllers\Admin\CatalogController::class, 'getUploadUrl']);
     });
 });
 // 🌟 RUTA DE AUDIO DEFINITIVA

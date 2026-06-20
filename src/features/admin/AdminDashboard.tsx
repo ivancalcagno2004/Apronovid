@@ -7,6 +7,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Ionicons } from '@expo/vector-icons';
 import { cn } from '../../lib/utils'; 
+import * as FileSystem from 'expo-file-system/legacy';
 
 // 🌟 Componentes RNR Base
 import ScreenWrapper from '../../components/ScreenWrapper';
@@ -103,51 +104,74 @@ export default function AdminDashboard() {
         setUploadProgress(0);
 
         try {
-            const formData = new FormData();
-            formData.append('title', title);
-            formData.append('category_id', selectedCategory.value); // Pasamos el .value del Select
-            if (author) formData.append('author', author);
-            if (reader) formData.append('reader', reader);
-            if (year) formData.append('year', year);
+            // 1. Pedimos la URL temporal a Laravel
+            const { data: ticket } = await api.get('/admin/catalog/upload-url');
 
-            formData.append('audio_file', {
-                uri: Platform.OS === 'ios' ? audioFile.uri.replace('file://', '') : audioFile.uri,
-                name: audioFile.name,
-                type: audioFile.mimeType || 'audio/mpeg'
-            } as any);
-
-            await api.post('/admin/catalog', formData, {
-                headers: { 
-                    'Content-Type': 'multipart/form-data',
-                    'Accept': 'application/json' 
-                }, 
-                timeout: 300000, 
-                onUploadProgress: (progressEvent) => {
-                    if (progressEvent.total) {
-                        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-                        setUploadProgress(percentCompleted);
-                    }
-                }
-            });
+            // 2. Subimos el archivo DIRECTAMENTE a Cloudflare R2
+            const fileUri = Platform.OS === 'ios' ? audioFile.uri.replace('file://', '') : audioFile.uri;
             
-            Toast.show({ type: 'success', text1: 'Éxito', text2: 'Audiolibro subido al catálogo.', position: 'bottom' });
+            const uploadTask = FileSystem.createUploadTask(
+                ticket.upload_url,
+                fileUri,
+                {
+                    httpMethod: 'PUT',
+                    uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+                    headers: {
+                        // 🌟 SOLUCIÓN 1: Obligamos a que coincida EXACTAMENTE con la firma del backend
+                        'Content-Type': 'audio/mpeg',
+                    },
+                },
+                (progress) => {
+                    const percentCompleted = Math.round((progress.totalBytesSent * 100) / progress.totalBytesExpectedToSend);
+                    setUploadProgress(percentCompleted);
+                }
+            );
 
-            setTitle('');
-            setAuthor('');
-            setReader('');
-            setYear('');
-            setAudioFile(null);
-            setUploadProgress(0);
-            if(categories.length > 0) {
-                setSelectedCategory({ label: categories[0].name, value: categories[0].id.toString() });
+            const uploadResult = await uploadTask.uploadAsync();
+
+            if (uploadResult?.status === 200) {
+                // 3. Guardamos los datos en Laravel
+                await api.post('/admin/catalog', {
+                    title,
+                    category_id: selectedCategory.value,
+                    author: author || null,
+                    reader: reader || null,
+                    // 🌟 SOLUCIÓN 2: Convertimos el string vacío en null para no romper la validación "integer"
+                    year: year ? parseInt(year) : null,
+                    audio_path: ticket.path 
+                });
+                
+                Toast.show({ type: 'success', text1: 'Éxito', text2: 'Audiolibro subido al catálogo.', position: 'bottom' });
+
+                // Limpiar formulario
+                setTitle('');
+                setAuthor('');
+                setReader('');
+                setYear('');
+                setAudioFile(null);
+                setUploadProgress(0);
+                if(categories.length > 0) {
+                    setSelectedCategory({ label: categories[0].name, value: categories[0].id.toString() });
+                }
+            } else {
+                // 🌟 MAGIA DE DEBUGGING: Si falla, tiramos el error con el Status de Cloudflare
+                throw new Error(`Cloudflare rechazó el archivo (Error HTTP: ${uploadResult?.status})`);
             }
         } catch (error: any) {
-            let errorMsg = "No se pudo subir el archivo.";
+            console.error(error); // Imprime el error real en la consola de Expo
+            let errorMsg = "No se pudo subir el archivo de audio.";
+            
+            // Si el error viene de Laravel (validaciones)
             if (error.response?.data?.errors) {
                 errorMsg = Object.values(error.response.data.errors)[0] as string;
             } else if (error.response?.data?.message) {
                 errorMsg = error.response.data.message;
+            } 
+            // Si el error viene de Cloudflare (El throw new Error que armamos arriba)
+            else if (error.message) {
+                errorMsg = error.message; 
             }
+            
             Toast.show({ type: 'error', text1: 'Error al subir', text2: errorMsg, position: 'bottom' });
         } finally {
             setIsUploading(false);

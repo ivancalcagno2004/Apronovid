@@ -15,24 +15,59 @@ use Illuminate\Support\Facades\Cache;
 
 class CatalogController extends Controller
 {
-    public function index()
+    // 🌟 APLICAMOS EL S3Client DIRECTO AL ADMIN
+    public function getUploadUrl(Request $request)
     {
-        $audiobooks = Audiobook::with('category')
-            ->orderBy('created_at', 'desc')
-            ->get()
-            ->map(function ($book) {
-                return [
-                    'id' => $book->id,
-                    'title' => $book->title,
-                    'author' => $book->author,
-                    'reader' => $book->reader,
-                    'year' => $book->year,
-                    'audio_path' => $book->audio_path,
-                    'category_name' => $book->category ? $book->category->name : 'Sin categoría',
-                ];
-            });
+        $filename = 'catalog_audios/' . \Illuminate\Support\Str::uuid() . '.mp3';
 
-        return response()->json($audiobooks);
+        $s3Client = new \Aws\S3\S3Client([
+            'version'     => 'latest',
+            'region'      => env('AWS_DEFAULT_REGION', 'auto'),
+            'endpoint'    => env('AWS_ENDPOINT'),
+            'credentials' => [
+                'key'    => env('AWS_ACCESS_KEY_ID'),
+                'secret' => env('AWS_SECRET_ACCESS_KEY'),
+            ],
+            'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', true),
+        ]);
+
+        $command = $s3Client->getCommand('PutObject', [
+            'Bucket' => env('AWS_BUCKET'),
+            'Key' => $filename,
+            'ContentType' => 'audio/mpeg'
+        ]);
+
+        $presignedRequest = $s3Client->createPresignedRequest($command, '+15 minutes');
+        $url = (string) $presignedRequest->getUri();
+
+        return response()->json([
+            'upload_url' => $url,
+            'path' => $filename
+        ]);
+    }
+
+    public function index(Request $request)
+    {
+        $paginator = Audiobook::with('category')
+            ->orderBy('created_at', 'desc')
+            ->cursorPaginate(15);
+
+        $audiobooks = collect($paginator->items())->map(function ($book) {
+            return [
+                'id' => 'hist_' . $book->id,
+                'title' => $book->title,
+                'author' => $book->author,
+                'reader' => $book->reader,
+                'year' => $book->year,
+                'audio_path' => $book->audio_path,
+                'category_name' => $book->category ? $book->category->name : 'Sin categoría',
+            ];
+        });
+
+        return response()->json([
+            'data' => $audiobooks,
+            'next_cursor' => $paginator->nextCursor() ? $paginator->nextCursor()->encode() : null
+        ]);
     }
 
     public function store(Request $request)
@@ -43,10 +78,8 @@ class CatalogController extends Controller
             'author' => 'nullable|string',
             'reader' => 'nullable|string',
             'year' => 'nullable|integer',
-            'audio_file' => 'required|file|mimes:mp3,wav|max:204800',
+            'audio_path' => 'required|string',
         ]);
-
-        $path = $request->file('audio_file')->store('catalog_audios', 'public');
 
         $audiobook = Audiobook::create([
             'title' => $request->title,
@@ -54,7 +87,7 @@ class CatalogController extends Controller
             'author' => $request->author,
             'reader' => $request->reader,
             'year' => $request->year,
-            'audio_path' => $path,
+            'audio_path' => $request->audio_path,
         ]);
 
         try {
@@ -62,18 +95,14 @@ class CatalogController extends Controller
                 ->where('role', 'oyente')
                 ->where(function ($query) use ($audiobook) {
 
-                    // Condición 1: Ha pedido audios de esta categoría
                     $query->whereHas('readingRequests', function ($q) use ($audiobook) {
                         $q->where('category_id', $audiobook->category_id);
                     })
-
-                        // 🌟 Condición 2: Tiene favoritos (de CUALQUIER TIPO) de esta categoría
                         ->orWhereHas('favorites', function ($q) use ($audiobook) {
                             $q->whereHasMorph(
                                 'favoritable',
                                 [\App\Models\Audiobook::class, \App\Models\ReadingRequest::class],
                                 function ($qMorph) use ($audiobook) {
-                                    // Buscamos en la columna category_id del modelo final
                                     $qMorph->where('category_id', $audiobook->category_id);
                                 }
                             );
@@ -83,10 +112,8 @@ class CatalogController extends Controller
             $messages = [];
 
             foreach ($interestedUsers as $user) {
-                // CREAMOS UNA LLAVE ÚNICA PARA ESTE USUARIO
                 $cacheKey = 'recommendation_sent_today_' . $user->id;
 
-                // SI YA SE LE ENVIÓ UNA RECOMENDACIÓN HOY, LO SALTAMOS
                 if (Cache::has($cacheKey)) {
                     continue;
                 }
@@ -103,7 +130,6 @@ class CatalogController extends Controller
                     ]
                 ];
 
-                // 🌟 GUARDAMOS EN CACHÉ QUE YA FUE NOTIFICADO (Vence a la medianoche)
                 Cache::put($cacheKey, true, now()->endOfDay());
             }
 
@@ -122,12 +148,28 @@ class CatalogController extends Controller
 
     public function destroy($id)
     {
-        $audiobook = Audiobook::findOrFail($id);
+        $realId = str_replace('hist_', '', $id);
+        $audiobook = Audiobook::findOrFail($realId);
 
         if ($audiobook->audio_path) {
-            $storagePath = 'public/' . ltrim($audiobook->audio_path, '/');
-            if (Storage::exists($storagePath)) {
-                Storage::delete($storagePath);
+            try {
+                $s3Client = new \Aws\S3\S3Client([
+                    'version'     => 'latest',
+                    'region'      => env('AWS_DEFAULT_REGION', 'auto'),
+                    'endpoint'    => env('AWS_ENDPOINT'),
+                    'credentials' => [
+                        'key'    => env('AWS_ACCESS_KEY_ID'),
+                        'secret' => env('AWS_SECRET_ACCESS_KEY'),
+                    ],
+                    'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', true),
+                ]);
+
+                $s3Client->deleteObject([
+                    'Bucket' => env('AWS_BUCKET'),
+                    'Key'    => $audiobook->audio_path,
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Error borrando audio de R2: ' . $e->getMessage());
             }
         }
 
@@ -159,7 +201,6 @@ class CatalogController extends Controller
         $readingRequest->voluntario_id = $recording->volunteer_id;
         $readingRequest->save();
 
-        // Avisar a los involucrados
         $this->notifyUser($recording->volunteer_id, '¡Audio Aprobado! 🎉', 'Un administrador aprobó tu lectura manualmente.');
         $this->notifyUser($readingRequest->oyente_id, '¡Tu solicitud fue grabada! 🎧', "Ya podés escuchar '{$readingRequest->title}'.");
 
@@ -168,7 +209,6 @@ class CatalogController extends Controller
 
     public function rejectReview(Request $request, $id)
     {
-        // Validamos que el admin haya mandado un motivo
         $request->validate([
             'feedback' => 'required|string|max:1000'
         ]);
@@ -177,14 +217,12 @@ class CatalogController extends Controller
         $readingRequest = \App\Models\ReadingRequest::findOrFail($recording->reading_request_id);
 
         $recording->status = 'rejected';
-        // 🌟 Guardamos el feedback del admin en la columna de la IA con una etiqueta
         $recording->ai_transcription = "Revisión Manual: " . $request->feedback;
         $recording->save();
 
         $readingRequest->status = 'pending';
         $readingRequest->save();
 
-        // Le mandamos el motivo por notificación push también
         $this->notifyUser(
             $recording->volunteer_id,
             'Audio rechazado ❌',

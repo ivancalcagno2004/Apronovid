@@ -14,7 +14,7 @@ class DatabaseSeeder extends Seeder
     {
         // 1. Crear el usuario Administrador
         User::firstOrCreate(
-            ['email' => 'admin@apronovid.com'], // Si este email ya existe, no lo duplica
+            ['email' => 'apronovid.app@gmail.com'], // Si este email ya existe, no lo duplica
             [
                 'name' => 'Administrador Apronovid',
                 'password' => Hash::make('admin1234'), // Contraseña por defecto

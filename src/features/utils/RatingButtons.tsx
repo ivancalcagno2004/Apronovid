@@ -43,7 +43,7 @@ const RatingButtons = ({ volunteerId, audioId }: RatingButtonsProps) => {
   }
 
   return (
-    <View className="mt-4 border-t border-gray-200 pt-3">
+    <View className="bg-white" accessible={true} accessibilityLabel="Valoración de la lectura">
       
       {/* Mensaje */}
       <Text className="text-center text-gray-500 mb-1.5 text-xs font-medium">

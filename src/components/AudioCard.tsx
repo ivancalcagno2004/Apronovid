@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
 import { View, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-// 🌟 LA MAGIA ESTÁ ACÁ: Importamos desde /legacy
 import * as FileSystem from 'expo-file-system/legacy'; 
 import * as Sharing from 'expo-sharing';
 import Toast from 'react-native-toast-message';
 
-import { SERVER_URL } from '../services/api';
 import AudioPlayer from '../features/utils/AudioPlayer';
 import RatingButtons from '../features/utils/RatingButtons';
 import { cn } from '../lib/utils';
@@ -77,7 +75,7 @@ export default function AudioCard({
       setIsDownloading(true);
       Toast.show({ type: 'info', text1: 'Descargando...', text2: 'Preparando el archivo, aguardá un momento.', position: 'bottom', visibilityTime: 5000 });
 
-      const audioUrl = `${SERVER_URL}/storage/${item.audio_path.replace(/^\//, '')}`;
+      const audioUrl = item.audio_path;
       
       const safeTitle = (displayTitle || 'audio').replace(/[^a-zA-Z0-9]/g, '_');
       
@@ -125,7 +123,7 @@ export default function AudioCard({
           accessibilityLabel={
             isVolunteerContext 
               ? `Grabación: ${displayTitle}. Fecha: ${new Date(item.created_at).toLocaleDateString()}. Estado: ${translateStatus(item.status)}`
-              : `Audio: ${displayTitle}. ${item.category_name ? `Categoría: ${item.category_name}.` : ''} ${item.likes_count ? `Recomendado por ${item.likes_count} oyentes.` : ''} ${context === 'history' && isCompleted ? 'Estado: Listo.' : ''}`
+              : `Audio: ${displayTitle}. ${item.category_name ? `Categoría: ${item.category_name}.` : ''} ${item.likes_count ? `Recomendado por ${item.likes_count} oyentes.` : ''} ${context === 'history' && isCompleted ? 'Estado: Listo.' : 'Estado: En espera.'} ${context === 'history' && item.is_public ? 'Este audio es público.' : 'Este audio es privado.'}`
           }
         >
           <Text className="text-2xl font-extrabold text-foreground mb-3 leading-tight" importantForAccessibility="no">
@@ -310,7 +308,7 @@ export default function AudioCard({
       {hasAudio && (isCompleted || isVolunteerContext) && !isValidating && !isAdminReview ? (
         <View className="mt-1">
           <AudioPlayer 
-            audioUrl={`${SERVER_URL}/storage/${item.audio_path.replace(/^\//, '')}`} 
+            audioUrl={item.audio_path}
             id={item.id.toString()} 
             activeId={playingId} 
             onPlay={(id) => setPlayingId(String(id))} 

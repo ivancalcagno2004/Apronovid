@@ -19,8 +19,6 @@ class ValidateAudioJob implements ShouldQueue
 
     public $requestId;
     public $timeout = 300;
-
-    // Permitimos 3 intentos antes de rendirnos
     public $tries = 3;
 
     public function __construct($requestId)
@@ -36,7 +34,6 @@ class ValidateAudioJob implements ShouldQueue
         if (!$recording || !$recording->audio_path) return;
 
         $textoOriginal = $readingRequest->description_or_text;
-        $audioPathAbsoluto = storage_path('app/public/' . $recording->audio_path);
 
         if (empty(trim($textoOriginal))) {
             $readingRequest->status = 'completed';
@@ -45,23 +42,53 @@ class ValidateAudioJob implements ShouldQueue
         }
 
         try {
+            // 🌟 1. Generamos la URL de Lectura (GET) usando el S3Client nativo
+            $s3Client = new \Aws\S3\S3Client([
+                'version'     => 'latest',
+                'region'      => env('AWS_DEFAULT_REGION', 'auto'),
+                'endpoint'    => env('AWS_ENDPOINT'),
+                'credentials' => [
+                    'key'    => env('AWS_ACCESS_KEY_ID'),
+                    'secret' => env('AWS_SECRET_ACCESS_KEY'),
+                ],
+                'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', true),
+            ]);
+
+            $command = $s3Client->getCommand('GetObject', [
+                'Bucket' => env('AWS_BUCKET'),
+                'Key'    => $recording->audio_path,
+            ]);
+
+            // Generamos la firma para poder leer el archivo (válida por 15 min)
+            $presignedRequest = $s3Client->createPresignedRequest($command, '+15 minutes');
+            $audioUrl = (string) $presignedRequest->getUri();
+
             $groqKey = env('GROQ_API_KEY');
             if (!$groqKey) {
-                Log::error("Falta GROQ_API_KEY en el archivo .env");
-                throw new \Exception("Falta API KEY"); // Forzamos el catch
+                throw new \Exception("Falta API KEY");
             }
 
+            // 🌟 2. Descargamos el archivo temporalmente desde Cloudflare a Azure
+            $tempPath = sys_get_temp_dir() . '/' . uniqid() . '.mp3';
+            file_put_contents($tempPath, file_get_contents($audioUrl));
+
+            // 🌟 3. Lo mandamos a Groq
             $guzzleClient = new \GuzzleHttp\Client(['verify' => false]);
             $client = \OpenAI::factory()
                 ->withApiKey($groqKey)
-                ->withBaseUri('https://api.groq.com/openai/v1')
+                ->withBaseUri('https://api.groq.com/openai/v1') // Corregido el doble .api.api
                 ->withHttpClient($guzzleClient)
                 ->make();
 
             $response = $client->audio()->transcribe([
                 'model' => 'whisper-large-v3',
-                'file' => fopen($audioPathAbsoluto, 'r'),
+                'file' => fopen($tempPath, 'r'),
             ]);
+
+            // Limpiamos el archivo temporal del servidor
+            if (file_exists($tempPath)) {
+                unlink($tempPath);
+            }
 
             $textoTranscrito = $response->text ?? '';
 
@@ -80,8 +107,13 @@ class ValidateAudioJob implements ShouldQueue
                     $recording->status = 'approved';
                     $recording->save();
 
+                    if ($readingRequest->file_path) {
+                        \Illuminate\Support\Facades\Storage::disk('public')->delete($readingRequest->file_path);
+                    }
+
                     $readingRequest->status = 'completed';
                     $readingRequest->audio_path = $recording->audio_path;
+                    $readingRequest->file_path = null;
                     $readingRequest->voluntario_id = $recording->volunteer_id;
                     $readingRequest->save();
 
@@ -100,10 +132,8 @@ class ValidateAudioJob implements ShouldQueue
 
                             $messages = [];
                             foreach ($interestedUsers as $user) {
-                                // 🌟 LLAVE ÚNICA DEL USUARIO
                                 $cacheKey = 'recommendation_sent_today_' . $user->id;
 
-                                // 🌟 SI YA LO NOTIFICAMOS HOY, LO SALTAMOS
                                 if (Cache::has($cacheKey)) {
                                     continue;
                                 }
@@ -120,7 +150,6 @@ class ValidateAudioJob implements ShouldQueue
                                     ]
                                 ];
 
-                                // 🌟 GUARDAMOS EL REGISTRO HASTA LA MEDIANOCHE
                                 Cache::put($cacheKey, true, now()->endOfDay());
                             }
 
@@ -149,16 +178,13 @@ class ValidateAudioJob implements ShouldQueue
         } catch (\Exception $e) {
             Log::error("Error en Job de IA (Intento " . $this->attempts() . "): " . $e->getMessage());
 
-            // 🌟 NUEVO: Sistema de degradación elegante (Fallback)
             if ($this->attempts() < $this->tries) {
-                // Esperamos 1 min, luego 2 min, etc antes de reintentar
                 $this->release(60 * $this->attempts());
                 return;
             }
 
-            // Si agotamos los intentos, no rechazamos: pasa a Revisión Manual
             $recording->status = 'manual_review';
-            $recording->ai_transcription = "La IA falló o se saturó. Requiere validación humana.";
+            $recording->ai_transcription = "La IA falló o se saturó. Requiere validación administrativa.";
             $recording->save();
 
             $readingRequest->status = 'manual_review';

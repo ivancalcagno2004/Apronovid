@@ -17,9 +17,31 @@ class VolunteerRecordingController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
+        // 🌟 Formateamos la colección para armar la URL absoluta de Cloudflare
+        $formattedRecordings = $recordings->map(function ($item) {
+
+            $fullAudioUrl = $item->audio_path
+                ? (str_starts_with($item->audio_path, 'http')
+                    ? $item->audio_path
+                    : rtrim(env('R2_PUBLIC_URL'), '/') . '/' . ltrim($item->audio_path, '/'))
+                : null;
+
+            return [
+                'id' => $item->id,
+                'status' => $item->status,
+                'audio_path' => $fullAudioUrl,
+                'ai_transcription' => $item->ai_transcription,
+                'created_at' => $item->created_at,
+                'reading_request' => $item->readingRequest ? [
+                    'title' => $item->readingRequest->title,
+                    'description_or_text' => $item->readingRequest->description_or_text,
+                ] : null,
+            ];
+        });
+
         return response()->json([
             'success' => true,
-            'data' => $recordings
+            'data' => $formattedRecordings
         ]);
     }
 
@@ -118,12 +140,66 @@ class VolunteerRecordingController extends Controller
         if ($hasHitAudio) $badges[] = 'Hit de la Comunidad';
 
         return response()->json([
+            'id' => $user->id,
             'name' => $user->name,
             'public_audios' => $publicAudios,
             'private_audios' => $privateAudios,
             'total_audios' => $totalApproved,
             'stars' => $user->stars,
             'badges' => $badges
+        ]);
+    }
+
+    public function getLeaderboard()
+    {
+        // 1. Buscamos a los usuarios con mejores estrellas y likes
+        $users = User::whereNotNull('stars')
+            ->where('stars', '>', 0)
+            ->orderBy('stars', 'desc')
+            ->orderBy('total_likes', 'desc')
+            ->take(10)
+            ->get();
+
+        // 2. Optimizamos la consulta para no hacer N+1 (buscamos los audios de todos a la vez)
+        $audioCounts = \App\Models\ReadingRequest::selectRaw('voluntario_id, count(*) as total')
+            ->whereIn('voluntario_id', $users->pluck('id'))
+            ->where('status', 'completed')
+            ->groupBy('voluntario_id')
+            ->pluck('total', 'voluntario_id');
+
+        // 3. Mapeamos la data
+        $leaderboard = $users->map(function ($user) use ($audioCounts) {
+            $totalApproved = $audioCounts->get($user->id, 0);
+
+            // Resumen rápido de medallas para la UI
+            $topBadge = null;
+            if ($totalApproved >= 30) $topBadge = 'Oro';
+            elseif ($totalApproved >= 20) $topBadge = 'Plata';
+            elseif ($totalApproved >= 10) $topBadge = 'Bronce';
+
+            if ($user->stars >= 4.8 && ($user->total_likes + $user->total_dislikes) >= 20) {
+                $topBadge = 'Cristal';
+            }
+
+            return [
+                'id' => $user->id,
+                'name' => $user->name,
+                'stars' => $user->stars,
+                'total_audios' => $totalApproved,
+                'likes' => $user->total_likes,
+                'top_badge' => $topBadge,
+            ];
+        });
+
+        // 4. Re-ordenamos el Top 10 final por Estrellas -> Audios grabados -> Likes
+        $leaderboard = $leaderboard->sortByDesc('likes')
+            ->sortByDesc('total_audios')
+            ->sortByDesc('stars')
+            ->values();
+
+        return response()->json([
+            'success' => true,
+            'data' => $leaderboard
         ]);
     }
 }

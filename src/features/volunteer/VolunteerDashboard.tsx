@@ -8,6 +8,7 @@ import Toast from 'react-native-toast-message';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { cn } from '../../lib/utils'; 
+import * as FileSystem from 'expo-file-system/legacy';
 
 // 🌟 Componentes RNR Base
 import ScreenWrapper from '../../components/ScreenWrapper';
@@ -47,12 +48,45 @@ export default function VolunteerDashboard({ navigation, route }: any) {
     };
   }, []);
 
+  // 🌟 VERIFICACIÓN EXPLÍCITA DE PERMISOS (Obligatorio Google Play)
+  const checkMicrophonePermission = async (): Promise<boolean> => {
+    const { status } = await Audio.getPermissionsAsync();
+    
+    if (status === 'granted') {
+        return true; 
+    }
+
+    // Si aún no dimos permiso, mostramos la alerta de divulgación
+    return new Promise((resolve) => {
+        Alert.alert(
+            "Acceso al micrófono",
+            "Apronovid necesita usar tu micrófono exclusivamente para que puedas grabar la lectura en voz alta de este pedido. El audio será enviado a los oyentes.",
+            [
+                { 
+                    text: "Cancelar", 
+                    style: "cancel",
+                    onPress: () => resolve(false)
+                },
+                { 
+                    text: "Entendido", 
+                    onPress: async () => {
+                        // Recién acá disparamos el popup del sistema operativo
+                        const { status: newStatus } = await Audio.requestPermissionsAsync();
+                        resolve(newStatus === 'granted');
+                    }
+                }
+            ]
+        );
+    });
+  };
+
   const startRecording = async () => {
     try {
-      const permission = await Audio.requestPermissionsAsync();
-      if (permission.status !== 'granted') return Alert.alert('Permiso denegado', 'Necesitamos acceso al micrófono.');
-
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      const hasPermission = await checkMicrophonePermission();
+      if (!hasPermission) {
+        Toast.show({ type: 'error', text1: 'Permiso denegado', text2: 'Necesitamos tu micrófono para grabar.' });
+        return;
+      }
 
       const { recording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY,
@@ -65,7 +99,6 @@ export default function VolunteerDashboard({ navigation, route }: any) {
       setIsPaused(false);
       setAudioUri(null);
       
-      // 🌟 ACCESIBILIDAD: Anunciar que arrancó
       AccessibilityInfo.announceForAccessibility("Grabación iniciada");
     } catch (err) {
       Alert.alert('Error', 'No se pudo iniciar el micrófono.');
@@ -185,22 +218,39 @@ export default function VolunteerDashboard({ navigation, route }: any) {
 
   const uploadAudio = async () => {
     if (!audioUri || !request?.id) return;
+    
     try {
       setIsUploading(true);
-      const formData = new FormData();
-      const fileType = audioUri.endsWith('.m4a') ? 'audio/m4a' : 'audio/mp4';
-      
-      formData.append('audio', { uri: audioUri, name: `grabacion_${request.id}.m4a`, type: fileType } as any);
+      Toast.show({ type: 'info', text1: 'Subiendo...', text2: 'No cierres la aplicación.' });
 
-      await api.post(`/reading-requests/${request.id}/audio`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const { data: ticket } = await api.get(`/volunteer/upload-url/${request.id}`);
 
-      setAudioUri(null);
-      Toast.show({ type: 'success', text1: '¡Audio Enviado!', text2: 'Gracias por tu aporte a la comunidad.' });
-      navigation.goBack();
+      const uploadTask = FileSystem.createUploadTask(
+        ticket.upload_url, 
+        audioUri,
+        {
+          httpMethod: 'PUT',
+          uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT, // Asegurado para R2
+          headers: { 'Content-Type': 'audio/mpeg' },
+        }
+      );
+
+      const uploadResult = await uploadTask.uploadAsync();
+
+      if (uploadResult?.status === 200) {
+        await api.post(`/reading-requests/${request.id}/audio`, {
+          audio_path: ticket.path 
+        });
+
+        setAudioUri(null);
+        Toast.show({ type: 'success', text1: '¡Audio Enviado!', text2: 'Gracias por tu aporte a la comunidad.' });
+        navigation.goBack();
+      } else {
+        throw new Error("Cloudflare rechazó el archivo");
+      }
     } catch (error: any) {
-      Toast.show({ type: 'error', text1: 'Error al subir', text2: error.response?.data?.message || 'No se pudo subir el audio.' });
+      console.error(error);
+      Toast.show({ type: 'error', text1: 'Error al subir', text2: 'Hubo un problema de red. Intentá de nuevo.' });
     } finally {
       setIsUploading(false);
     }
@@ -209,16 +259,13 @@ export default function VolunteerDashboard({ navigation, route }: any) {
   const attachedFileUrl = request?.file_path ? `${SERVER_URL}/storage/${request.file_path}` : null;
   const normalizedVolume = Math.min(Math.max((metering + 60) * (100 / 60), 0), 100);
   
-  // Colores dinámicos del medidor
-  let meterColor = "#10B981"; // Verde esmeralda suave
-  if (metering > -10) meterColor = "#EF4444"; // Rojo peligro
-  else if (metering > -20) meterColor = '#F59E0B'; // Ambar advertencia
+  let meterColor = "#10B981";
+  if (metering > -10) meterColor = "#EF4444"; 
+  else if (metering > -20) meterColor = '#F59E0B';
 
   return (
-    // 🌟 Usamos flex-1 pero mantenemos insets para que el contenido fluya y el webview no se rompa
     <ScreenWrapper withBottomInsets={true}>
       
-      {/* 🌟 HEADER CON BOTÓN VOLVER */}
       <View className="px-6 pt-2 pb-4 border-b border-border bg-background/90 z-10 flex-row items-center">
         <TouchableOpacity 
           onPress={() => navigation.goBack()} 
@@ -235,13 +282,12 @@ export default function VolunteerDashboard({ navigation, route }: any) {
 
       <View className="flex-1 bg-background p-5">
         
-        {/* 1. 🌟 SECCIÓN DE LECTURA ÉPICA */}
+        {/* SECCIÓN DE LECTURA ÉPICA */}
         <View className="flex-1 bg-card p-5 rounded-[32px] border border-border/60 mb-5 shadow-lg shadow-black/5 overflow-hidden">
           <Text className="text-xl font-extrabold text-primary mb-4 text-center" accessibilityRole="header">
             {request?.title || 'Pedido Desconocido'}
           </Text>
           
-          {/* 🌟 TABS DE RNR PARA CAMBIAR DE VISTA */}
           {attachedFileUrl && (
             <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'text' | 'document')} className="w-full flex-col mb-4">
               <TabsList className="flex-row w-full bg-secondary/90 rounded-2xl p-1 h-14">
@@ -257,7 +303,6 @@ export default function VolunteerDashboard({ navigation, route }: any) {
             </Tabs>
           )}
 
-          {/* TELEPROMPTER */}
           {viewMode === 'text' && (
             request?.description_or_text ? (
               <ScrollView className="flex-1 bg-secondary/30 p-4 rounded-[20px] border border-border/50" showsVerticalScrollIndicator={true}>
@@ -271,7 +316,6 @@ export default function VolunteerDashboard({ navigation, route }: any) {
             )
           )}
 
-          {/* WEBVIEW (PDF / Imagen) */}
           {viewMode === 'document' && attachedFileUrl && (
             <View className="flex-1 rounded-[20px] overflow-hidden border border-border/50 bg-secondary/30 relative">
               <WebView
@@ -293,7 +337,7 @@ export default function VolunteerDashboard({ navigation, route }: any) {
           )}
         </View>
 
-        {/* 2. 🌟 MEDIDOR DE AUDIO PREMIUM */}
+        {/* MEDIDOR DE AUDIO PREMIUM */}
         {isRecording && (
         <View 
           className="w-full bg-card p-4 rounded-[24px] border border-border/60 mb-5 items-center shadow-sm"
@@ -311,7 +355,7 @@ export default function VolunteerDashboard({ navigation, route }: any) {
         </View>
       )}
 
-        {/* 3. 🌟 CONTROLES DE GRABACIÓN */}
+        {/* CONTROLES DE GRABACIÓN */}
         <View className="w-full pb-2">
           {!isRecording && !audioUri && (
             <Button size="lg" className="h-16 rounded-[24px] w-full shadow-md shadow-primary/20" onPress={startRecording} accessibilityLabel="Iniciar Grabación">
@@ -347,7 +391,7 @@ export default function VolunteerDashboard({ navigation, route }: any) {
             </View>
           )}
 
-          {/* 4. 🌟 CONTROLES DE SUBIDA Y PREVIA */}
+          {/* CONTROLES DE SUBIDA Y PREVIA */}
           {audioUri && !isRecording && (
             <View className="w-full bg-green-50/70 border border-green-200 p-5 rounded-[32px] shadow-sm">
               <View className="flex-row items-center justify-center mb-5" accessible={true} accessibilityLabel="Audio capturado correctamente">
