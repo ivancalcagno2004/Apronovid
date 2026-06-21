@@ -6,7 +6,7 @@ import * as SecureStore from 'expo-secure-store';
 
 export const SERVER_URL = __DEV__ 
   ? 'http://192.168.0.105:3333'  // <-- Tu backend local (verificá que siga siendo esta tu IP de Wi-Fi)
-  : 'http://20.88.17.113';       // <-- Tu backend en Azure
+  : 'https://apronovid.ddns.net';       // <-- Tu backend en Azure
 
 const api = axios.create({
   baseURL: `${SERVER_URL}/api`,

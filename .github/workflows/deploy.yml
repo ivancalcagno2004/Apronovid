@@ -1,0 +1,39 @@
+name: Deploy Automático a Azure
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "appronovid-backend/**"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Conectarse y Actualizar Servidor
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.AZURE_HOST }}
+          username: ${{ secrets.AZURE_USER }}
+          key: ${{ secrets.AZURE_SSH_KEY }}
+          script: |
+            cd /var/www/Apronovid
+
+            # 1. Bajamos el código nuevo (con sudo)
+            sudo git pull origin main
+
+            # 2. Entramos al backend
+            cd appronovid-backend
+
+            # 3. Instalamos dependencias (con sudo para poder escribir en la carpeta vendor)
+            # Nota: Composer suele tirar una advertencia amarilla por usarlo con sudo, es normal, ignorala.
+            sudo composer install --no-interaction --prefer-dist --optimize-autoloader
+
+            # 4. Limpiamos las cachés (con sudo)
+            sudo php artisan config:clear
+            sudo php artisan cache:clear
+            sudo php artisan view:clear
+
+            # 5. Reiniciamos los jobs de la IA (con sudo)
+            sudo php artisan queue:restart
