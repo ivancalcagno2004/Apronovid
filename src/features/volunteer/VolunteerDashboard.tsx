@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, TouchableOpacity, Alert, ScrollView, Linking, ActivityIndicator, AccessibilityInfo } from 'react-native';
+import { View, TouchableOpacity, ScrollView, Linking, ActivityIndicator, AccessibilityInfo } from 'react-native';
 import { Audio } from 'expo-av';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
@@ -15,6 +15,18 @@ import ScreenWrapper from '../../components/ScreenWrapper';
 import { Text } from '../../components/ui/text';
 import { Button } from '../../components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
+
+// 🌟 Componentes de Alerta (Asegurate de tener este archivo exportando todo en tu carpeta de UI)
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../components/ui/alert-dialog';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -38,6 +50,9 @@ export default function VolunteerDashboard({ navigation, route }: any) {
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
   const [previewDuration, setPreviewDuration] = useState(0);
   const [viewMode, setViewMode] = useState<'text' | 'document'>('text');
+  
+  // 🌟 Estado para controlar la visibilidad del nuevo Modal
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
 
   useEffect(() => {
     registerForPushNotificationsAsync();
@@ -48,46 +63,32 @@ export default function VolunteerDashboard({ navigation, route }: any) {
     };
   }, []);
 
-  // 🌟 VERIFICACIÓN EXPLÍCITA DE PERMISOS (Obligatorio Google Play)
-  const checkMicrophonePermission = async (): Promise<boolean> => {
+  // 🌟 PASO 1: Verificamos si ya hay permiso al tocar "Iniciar Grabación"
+  const handleStartPress = async () => {
     const { status } = await Audio.getPermissionsAsync();
     
     if (status === 'granted') {
-        return true; 
+      startRecordingNow(); // Si ya lo tiene, arranca directo
+    } else {
+      setShowPermissionModal(true); // Si no, abrimos nuestro modal hermoso
     }
-
-    // Si aún no dimos permiso, mostramos la alerta de divulgación
-    return new Promise((resolve) => {
-        Alert.alert(
-            "Acceso al micrófono",
-            "Apronovid necesita usar tu micrófono exclusivamente para que puedas grabar la lectura en voz alta de este pedido. El audio será enviado a los oyentes.",
-            [
-                { 
-                    text: "Cancelar", 
-                    style: "cancel",
-                    onPress: () => resolve(false)
-                },
-                { 
-                    text: "Entendido", 
-                    onPress: async () => {
-                        // Recién acá disparamos el popup del sistema operativo
-                        const { status: newStatus } = await Audio.requestPermissionsAsync();
-                        resolve(newStatus === 'granted');
-                    }
-                }
-            ]
-        );
-    });
   };
 
-  const startRecording = async () => {
-    try {
-      const hasPermission = await checkMicrophonePermission();
-      if (!hasPermission) {
-        Toast.show({ type: 'error', text1: 'Permiso denegado', text2: 'Necesitamos tu micrófono para grabar.' });
-        return;
-      }
+  // 🌟 PASO 2: El usuario tocó "Entendido" en el modal
+  const handlePermissionAccept = async () => {
+    setShowPermissionModal(false); // Cerramos el modal
+    const { status: newStatus } = await Audio.requestPermissionsAsync(); // Pedimos permiso al OS
+    
+    if (newStatus === 'granted') {
+      startRecordingNow();
+    } else {
+      Toast.show({ type: 'error', text1: 'Permiso denegado', text2: 'Necesitamos tu micrófono para grabar.' });
+    }
+  };
 
+  // 🌟 PASO 3: Lógica real de grabación aislada
+  const startRecordingNow = async () => {
+    try {
       const { recording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY,
         (status) => { if (status.metering !== undefined) setMetering(status.metering); },
@@ -101,7 +102,7 @@ export default function VolunteerDashboard({ navigation, route }: any) {
       
       AccessibilityInfo.announceForAccessibility("Grabación iniciada");
     } catch (err) {
-      Alert.alert('Error', 'No se pudo iniciar el micrófono.');
+      Toast.show({ type: 'error', text1: 'Error', text2: 'No se pudo iniciar el micrófono.' });
     }
   };
 
@@ -230,7 +231,7 @@ export default function VolunteerDashboard({ navigation, route }: any) {
         audioUri,
         {
           httpMethod: 'PUT',
-          uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT, // Asegurado para R2
+          uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
           headers: { 'Content-Type': 'audio/mpeg' },
         }
       );
@@ -266,6 +267,26 @@ export default function VolunteerDashboard({ navigation, route }: any) {
   return (
     <ScreenWrapper withBottomInsets={true}>
       
+      {/* 🌟 MODAL DE PERMISOS RNR */}
+      <AlertDialog open={showPermissionModal} onOpenChange={setShowPermissionModal}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Acceso al micrófono</AlertDialogTitle>
+            <AlertDialogDescription>
+              Apronovid necesita usar tu micrófono exclusivamente para que puedas grabar la lectura en voz alta de este pedido. El audio será enviado a los oyentes.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onPress={() => setShowPermissionModal(false)}>
+              <Text>Cancelar</Text>
+            </AlertDialogCancel>
+            <AlertDialogAction onPress={handlePermissionAccept}>
+              <Text className="text-white">Entendido</Text>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <View className="px-6 pt-2 pb-4 border-b border-border bg-background/90 z-10 flex-row items-center">
         <TouchableOpacity 
           onPress={() => navigation.goBack()} 
@@ -358,7 +379,7 @@ export default function VolunteerDashboard({ navigation, route }: any) {
         {/* CONTROLES DE GRABACIÓN */}
         <View className="w-full pb-2">
           {!isRecording && !audioUri && (
-            <Button size="lg" className="h-16 rounded-[24px] w-full shadow-md shadow-primary/20" onPress={startRecording} accessibilityLabel="Iniciar Grabación">
+            <Button size="lg" className="h-16 rounded-[24px] w-full shadow-md shadow-primary/20" onPress={handleStartPress} accessibilityLabel="Iniciar Grabación">
               <Ionicons name="mic" size={24} color="#FFF" style={{ marginRight: 8 }} importantForAccessibility="no" />
               <Text className="text-white text-lg font-black tracking-wide">Iniciar Grabación</Text>
             </Button>
