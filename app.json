@@ -28,8 +28,8 @@
       "googleServicesFile": "./google-services.json",
 
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#0F172A" 
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0F172A"
       }
     },
     "web": {
